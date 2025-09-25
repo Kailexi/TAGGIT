@@ -1,2 +1,2 @@
 # TAGGIT
-TAGGIT is a game built on Unreal Engine 5 that reimagines the classic childhood game of tag. The rules are simple: run or chase. Its twist lies in the opponent — an adaptive AI powered by open machine learning libraries, making every match dynamic, unpredictable, and engaging.
+TAGGIT is a game built on the Unreal Engine 5, offering a modern interpretation of the classic childhood game of tag. At its core, the mechanics are simple and intuitive: the player must either chase or escape. What makes the project unique is that the opponent is not just another player, but an artificial intelligence powered by open machine learning libraries, capable of adapting to the player’s movements and strategies.
