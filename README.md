@@ -13,18 +13,18 @@ A stamina based movement system that incorporates sprinting, jumping, leaping, t
 To balance gameplay and introduce tactical depth, TAGGIT includes a **card-boost** system (currently WIP). These cards grant temporary buffs and open paths for strategic decision-making — layering strategy over reflex-based action.
 
 ### Game Modes:  
-- **PvP** — Face off against other players online and test your skills and reflexes.  
-- **Survival** — Every few minutes, new AI-powered bots spawn. Can you survive the onslaught?  
-- **One-on-One** — Quick duels against either players or AI-bots.
+ **PvP** — Face off against other players online and test your skills and reflexes.  
+ **Survival** — Every few minutes, new AI-powered bots spawn. Can you survive the onslaught?  
+ **1-v-1** — Quick duels against either players or AI-bots.
 
 
 ##  Developer Resources
 
-- **📄 Design Document**  
+ **📄 Design Document**  
   Dive into the project’s vision and structure here:  
   [Design Document (Google Docs)](https://docs.google.com/document/d/1y-zjIfR6l5XR5Q8lMKd7cEIrTGCZYUAzF4B31ZDhMl8/edit?usp=sharing)  
   
-- ** Project Tracking (Jira)**  
+ ** Project Tracking (Jira)**  
   Work and tasks will be organized via Jira. You can look up here:  
   [TAGGIT Project in Jira](https://kailexiprojecttag.atlassian.net/jira/software/projects/SCRUM/boards/1/timeline?atlOrigin=eyJpIjoiZGM4OGE5MzM5MDA1NDFhZGI3MDQzNWZkZmJjOWNiN2MiLCJwIjoiaiJ9)  
 
