@@ -4,6 +4,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include  "Camera/CameraComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+
 
 
 AInputCharacter::AInputCharacter()
@@ -19,7 +21,6 @@ AInputCharacter::AInputCharacter()
 
 }
 
-
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -28,15 +29,11 @@ void AInputCharacter::BeginPlay()
 
 }
 
-
-
 void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
 }
-
-
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -62,6 +59,9 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
 		
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AInputCharacter::Jump);
+		
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AInputCharacter::StartSprint);
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed , this, &AInputCharacter::EndSprint);
 	
 	
 	
@@ -108,6 +108,22 @@ if (IsValid(Controller))
 void AInputCharacter::Jump()
 {
 	ACharacter::Jump();
+}
+
+void AInputCharacter::StartSprint()
+{
+
+	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+	
+
+
+
+}
+
+void AInputCharacter::EndSprint()
+{
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
 }
 
 
