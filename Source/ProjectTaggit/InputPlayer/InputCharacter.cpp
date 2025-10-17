@@ -33,6 +33,8 @@ void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	UpdateStamina();
+
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -107,24 +109,76 @@ if (IsValid(Controller))
 
 void AInputCharacter::Jump()
 {
-	ACharacter::Jump();
+	if (bHasStamina && !bIsExhausted && CurrentStamina >= JumpStaminaCost)
+	{
+		ACharacter::Jump();
+		bIsJumping = true;
+		CurrentStamina -= JumpStaminaCost;
+		StaminaRegenDelay = DelayBeforeRefill;
+	}
 }
+
 
 void AInputCharacter::StartSprint()
 {
-
-	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
-	
-
-
-
+	if (bHasStamina && !bIsExhausted)
+	{
+		bIsSprinting = true;
+		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+	}
 }
 
 void AInputCharacter::EndSprint()
 {
+	bIsSprinting = false;
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-
 }
+
+
+
+void AInputCharacter::UpdateStamina()
+{
+	
+	const float DeltaTime = GetWorld()->GetDeltaSeconds();
+
+
+	if (bIsSprinting)
+	{
+		CurrentStamina -= StaminaDrainRate * DeltaTime;
+		StaminaRegenDelay = DelayBeforeRefill;
+	}
+
+
+	CurrentStamina = FMath::Clamp(CurrentStamina, 0.0f, MaxStamina);
+
+
+	if (CurrentStamina <= 0.0f)
+	{
+		bIsExhausted = true;
+		bHasStamina = false;
+		bIsSprinting = false;
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed; // stop sprint if we run out of stamina
+	}
+
+	if (StaminaRegenDelay > 0.0f)
+	{
+		StaminaRegenDelay -= DeltaTime;
+	}
+
+
+	if (!bIsSprinting && !bIsJumping && StaminaRegenDelay <= 0.0f)
+	{
+		CurrentStamina += StaminaRegenRate * DeltaTime;
+	}
+
+	// If refilled past threshold, reset exhaustion
+	if (CurrentStamina > MaxStamina * 0.7)
+	{
+		bIsExhausted = false;
+		bHasStamina = true;
+	}
+}
+
 
 
 
