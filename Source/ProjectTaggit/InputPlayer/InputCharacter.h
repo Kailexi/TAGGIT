@@ -10,6 +10,23 @@ class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAcess = "true"));
+	class UCameraComponent* Camera;
+	
+protected:
+
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput");
+	class UInputMappingContext* InputMapping;
+
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput");
+	class UInputAction* MoveAction;
+
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput");
+	class UInputAction* JumpAction;
+
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput");
+	class UInputAction* LookAction;
+
 public:
 	// Sets default values for this character's properties
 	AInputCharacter();
@@ -26,12 +43,9 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
+		void Move(const FInputActionValue& InputValue);
+		void Look(const FInputActionValue& InputValue);
+		void Jump();
 
-	UPROPERTY(EditAnywhere, Category = "EnhancedInput");
-	class UInputMappingContext* InputMapping;
 
-	UPROPERTY(EditAnywhere, Category = "EnhancedInput");
-	class UInputAction* TestAction;
-		
-	void TestInput();
 };

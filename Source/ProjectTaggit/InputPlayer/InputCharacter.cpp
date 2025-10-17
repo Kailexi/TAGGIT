@@ -3,11 +3,19 @@
 #include "InputMappingContext.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
+#include  "Camera/CameraComponent.h"
+
 
 AInputCharacter::AInputCharacter()
 {
 
 	PrimaryActorTick.bCanEverTick = true;
+
+	Camera = CreateDefaultSubobject<UCameraComponent>("Camera");	
+	Camera->SetupAttachment(GetRootComponent());
+	Camera->bUsePawnControlRotation = true;
+
+
 
 }
 
@@ -34,8 +42,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	// Input mapping context
-
-	if (APlayerController* PlayerController = Cast<APlayerController>(Controller));
+	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
 		// Get local player subsystem to add input mapping context
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
@@ -46,17 +53,38 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		}
 	}
 
-	if (UEnhancedInputComponent* Input = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
+	
+	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		Input->BindAction(TestAction, ETriggerEvent::Triggered, this,  &AInputCharacter::TestInput);
+		// Bind the input actions
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
+		
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
+		
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AInputCharacter::Jump);
+	
+	
 	
 	}
 
+
+
+
 }
 
-void AInputCharacter::TestInput()
+void AInputCharacter::Move(const FInputActionValue& InputValue)
 {
-	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Green, TEXT("Input Action Triggered!"));
-
+	FVector2D InputVector = InputValue.Get<FVector2D>();
 }
+
+void AInputCharacter::Look(const FInputActionValue& InputValue)
+{
+}
+
+void AInputCharacter::Jump()
+{
+	
+}
+
+
 
