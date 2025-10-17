@@ -1,40 +1,30 @@
-
 #include "ProjectTaggit/InputPlayer/InputCharacter.h"
 #include "InputMappingContext.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
-#include  "Camera/CameraComponent.h"
+#include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-
-
+#include "ProjectTaggit/StaminaComponent.h"
 
 AInputCharacter::AInputCharacter()
 {
-
 	PrimaryActorTick.bCanEverTick = true;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>("Camera");	
 	Camera->SetupAttachment(GetRootComponent());
 	Camera->bUsePawnControlRotation = true;
 
-
-
+	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>("StaminaComponent");
 }
 
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
-
-
 }
 
 void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	UpdateStamina();
-
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -47,31 +37,19 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
 			// Add input context
-
 			Subsystem->AddMappingContext(InputMapping, 0);
 		}
 	}
 
-	
 	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		// Bind the input actions
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
-		
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
-		
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AInputCharacter::Jump);
-		
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AInputCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed , this, &AInputCharacter::EndSprint);
-	
-	
-	
 	}
-
-
-
-
 }
 
 void AInputCharacter::Move(const FInputActionValue& InputValue)
@@ -89,39 +67,30 @@ void AInputCharacter::Move(const FInputActionValue& InputValue)
 		// Add movement input
 		AddMovementInput(ForwardDirection, InputVector.Y);
 		AddMovementInput(RightDirection, InputVector.X);
-
 	}
-
 }
 
 void AInputCharacter::Look(const FInputActionValue& InputValue)
 {
-
 	FVector2D InputVector = InputValue.Get<FVector2D>();
-
-if (IsValid(Controller))
+	if (IsValid(Controller))
 	{
 		AddControllerYawInput(InputVector.X);
 		AddControllerPitchInput(InputVector.Y);
 	}
-
 }
 
 void AInputCharacter::Jump()
 {
-	if (bHasStamina && !bIsExhausted && CurrentStamina >= JumpStaminaCost)
+	if (StaminaComponent->TryConsumeStamina(250.0f)) // Example stamina cost for jumping
 	{
 		ACharacter::Jump();
-		bIsJumping = true;
-		CurrentStamina -= JumpStaminaCost;
-		StaminaRegenDelay = DelayBeforeRefill;
 	}
 }
 
-
 void AInputCharacter::StartSprint()
 {
-	if (bHasStamina && !bIsExhausted)
+	if (StaminaComponent->CanPerformAction(100.0f)) // Example stamina threshold for sprinting
 	{
 		bIsSprinting = true;
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
@@ -132,51 +101,6 @@ void AInputCharacter::EndSprint()
 {
 	bIsSprinting = false;
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-}
-
-
-
-void AInputCharacter::UpdateStamina()
-{
-	
-	const float DeltaTime = GetWorld()->GetDeltaSeconds();
-
-
-	if (bIsSprinting)
-	{
-		CurrentStamina -= StaminaDrainRate * DeltaTime;
-		StaminaRegenDelay = DelayBeforeRefill;
-	}
-
-
-	CurrentStamina = FMath::Clamp(CurrentStamina, 0.0f, MaxStamina);
-
-
-	if (CurrentStamina <= 0.0f)
-	{
-		bIsExhausted = true;
-		bHasStamina = false;
-		bIsSprinting = false;
-		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed; // stop sprint if we run out of stamina
-	}
-
-	if (StaminaRegenDelay > 0.0f)
-	{
-		StaminaRegenDelay -= DeltaTime;
-	}
-
-
-	if (!bIsSprinting && !bIsJumping && StaminaRegenDelay <= 0.0f)
-	{
-		CurrentStamina += StaminaRegenRate * DeltaTime;
-	}
-
-	// If refilled past threshold, reset exhaustion
-	if (CurrentStamina > MaxStamina * 0.7)
-	{
-		bIsExhausted = false;
-		bHasStamina = true;
-	}
 }
 
 
