@@ -60,13 +60,31 @@ protected:
 		UPROPERTY(EditAnywhere, Category = "Movement")
 		float SprintSpeed;
 
-		bool isRunning;
-		bool isJumping;
-		bool canJump;
+		bool bIsSprinting;
 
+		//Stamina System
+		void UpdateStamina();
 
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float MaxStamina;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float CurrentStamina;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float StaminaDrainRate;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float StaminaRegenRate;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float StaminaRegenTime;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float StaminaRegenDelay;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float DelayBeforeRefill;
+		UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+		float JumpStaminaCost;
 
-
+		bool bIsJumping;
+		bool bIsExhausted;
+		bool bHasStamina;
 
 
 
