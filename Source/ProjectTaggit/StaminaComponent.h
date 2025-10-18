@@ -8,7 +8,7 @@ UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTTAGGIT_API UStaminaComponent : public UActorComponent
 {
 	GENERATED_BODY()
-	
+
 public:
 	UStaminaComponent();
 

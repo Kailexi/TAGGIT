@@ -15,7 +15,7 @@ class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaminaComponent* StaminaComponent;
-	
+
 protected:
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
@@ -39,22 +39,22 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
-    virtual void Landed(const FHitResult& Hit) override;
+	virtual void Landed(const FHitResult& Hit) override;
 
-public:	
+public:
 
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
-	
+
 	void Move(const FInputActionValue& InputValue);
 	void Look(const FInputActionValue& InputValue);
-	
+
 	void Jump();
 	void StartSprint();
 	void EndSprint();
-	
+
 
 	//Movement-speeds / states
 	UPROPERTY(EditAnywhere, Category = "Movement")
@@ -68,7 +68,7 @@ protected:
 
 
 
-	
+
 	//Stamina-relations
 	UPROPERTY(EditAnywhere, Category = "Stamina");
 	float SprintCostPerSecond;
