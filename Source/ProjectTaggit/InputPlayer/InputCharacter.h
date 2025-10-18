@@ -34,47 +34,48 @@ protected:
 	class UInputAction* SprintAction;
 
 public:
-
 	AInputCharacter();
 
 protected:
 
 	virtual void BeginPlay() override;
-
     virtual void Landed(const FHitResult& Hit) override;
 
 public:	
 
 	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
 	
 	void Move(const FInputActionValue& InputValue);
 	void Look(const FInputActionValue& InputValue);
+	
 	void Jump();
-
 	void StartSprint();
 	void EndSprint();
 	
 
-	//Movement-speeds
+	//Movement-speeds / states
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed;
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SprintSpeed;
-	
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsSprinting;
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsJumping;
+
+
+
 	
 	//Stamina-relations
 	UPROPERTY(EditAnywhere, Category = "Stamina");
 	float SprintCostPerSecond;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float JumpStaminaCost = 250.0f;
-	
-	const float StaminaThreshold = 250.0f;
-	bool bIsSprinting;
+
+
 
 
 	//HUD Accessors

@@ -26,19 +26,18 @@ void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bIsSprinting && StaminaComponent)
+	if (!StaminaComponent) return;
+
+	if (bIsSprinting)
 	{
-		float CurrentStamina = StaminaComponent->GetCurrentStamina();
-		if (CurrentStamina > StaminaThreshold)
+		// Always try to drain stamina while sprinting
+		if (!StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime))
 		{
-			StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
-		}
-		else
-		{
-			EndSprint(); // stop sprinting gracefully
+			EndSprint();
 		}
 	}
 }
+
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -47,6 +46,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
 		// Get local player subsystem to add input mapping context
+
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
 
@@ -56,7 +56,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		// Bind input actions
+
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::Jump);
@@ -83,14 +83,12 @@ void AInputCharacter::Jump()
 
 	float CurrentStamina = StaminaComponent ? StaminaComponent->GetCurrentStamina() : 0.0f;
 
-	// Allow jump if stamina is enough OR it's the "last jump" grace period
-	if (CurrentStamina >= JumpStaminaCost || CurrentStamina < JumpStaminaCost && CurrentStamina > 0.0f)
+	if (StaminaComponent->CanPerformAction(StaminaComponent->StaminaThreshold))
 	{
-		if (StaminaComponent)
-		{
+
 			float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
 			StaminaComponent->TryConsumeStamina(StaminaToConsume);
-		}
+		
 
 		bIsJumping = true;
 		ACharacter::Jump();
@@ -113,6 +111,8 @@ void AInputCharacter::Landed(const FHitResult& Hit)
 
 void AInputCharacter::StartSprint()
 {
+	if (!StaminaComponent) return;
+
 	if (StaminaComponent->CanPerformAction(SprintCostPerSecond))
 	{
 		bIsSprinting = true;
@@ -146,9 +146,8 @@ void AInputCharacter::Move(const FInputActionValue& InputValue)
 void AInputCharacter::Look(const FInputActionValue& InputValue)
 {
 	FVector2D InputVector = InputValue.Get<FVector2D>();
-	if (IsValid(Controller))
-	{
-		AddControllerYawInput(InputVector.X);
-		AddControllerPitchInput(InputVector.Y);
-	}
+	if (!Controller) return;
+
+	AddControllerYawInput(InputVector.X);
+	AddControllerPitchInput(InputVector.Y);
 }

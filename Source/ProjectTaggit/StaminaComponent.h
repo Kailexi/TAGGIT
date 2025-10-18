@@ -30,8 +30,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float RegenDelay = 5.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+	float StaminaThreshold = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Stamina")
 	bool bIsExhausted;
+
 
 private:
 	float RegenDelayRemaining;
