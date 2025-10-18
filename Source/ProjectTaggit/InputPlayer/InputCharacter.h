@@ -34,17 +34,17 @@ protected:
 	class UInputAction* SprintAction;
 
 public:
-	// Sets default values for this character's properties
+
 	AInputCharacter();
 
 protected:
-	// Called when the game starts or when spawned
+
 	virtual void BeginPlay() override;
 
     virtual void Landed(const FHitResult& Hit) override;
 
 public:	
-	// Called every frame
+
 	virtual void Tick(float DeltaTime) override;
 
 	// Called to bind functionality to input
@@ -58,18 +58,26 @@ protected:
 
 	void StartSprint();
 	void EndSprint();
-		
+	
+
+	//Movement-speeds
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed;
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SprintSpeed;
-	UPROPERTY(EditAnywhere, Category = "Movement");
+	
+	
+	//Stamina-relations
+	UPROPERTY(EditAnywhere, Category = "Stamina");
 	float SprintCostPerSecond;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float JumpStaminaCost = 250.0f;
-
+	
+	const float StaminaThreshold = 250.0f;
 	bool bIsSprinting;
 
+
+	//HUD Accessors
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetStaminaForHUD() const;
 

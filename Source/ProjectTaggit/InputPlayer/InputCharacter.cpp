@@ -26,13 +26,16 @@ void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Drain stamina while sprinting
-	if (bIsSprinting)
+	if (bIsSprinting && StaminaComponent)
 	{
-		if (StaminaComponent && !StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime))
+		float CurrentStamina = StaminaComponent->GetCurrentStamina();
+		if (CurrentStamina > StaminaThreshold)
 		{
-			// Stop sprinting if stamina is depleted
-			EndSprint();
+			StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
+		}
+		else
+		{
+			EndSprint(); // stop sprinting gracefully
 		}
 	}
 }
@@ -40,20 +43,20 @@ void AInputCharacter::Tick(float DeltaTime)
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	// Input mapping context
+
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
 		// Get local player subsystem to add input mapping context
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
-			// Add input context
+
 			Subsystem->AddMappingContext(InputMapping, 0);
 		}
 	}
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		// Bind the input actions
+		// Bind input actions
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::Jump);
@@ -76,20 +79,31 @@ bool bIsJumping = false;
 
 void AInputCharacter::Jump()
 {
-    if (bIsJumping)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Jump already in progress!"));
-        return;
-    }
 
-    bIsJumping = true;
-    UE_LOG(LogTemp, Warning, TEXT("CurrentStamina before jump: %f"), StaminaComponent->GetCurrentStamina());
-    if (StaminaComponent->TryConsumeStamina(JumpStaminaCost)) 
-    {
-        ACharacter::Jump();
-    }
-    UE_LOG(LogTemp, Warning, TEXT("CurrentStamina after jump: %f"), StaminaComponent->GetCurrentStamina());
-}
+
+	float CurrentStamina = StaminaComponent ? StaminaComponent->GetCurrentStamina() : 0.0f;
+
+	// Allow jump if stamina is enough OR it's the "last jump" grace period
+	if (CurrentStamina >= JumpStaminaCost || CurrentStamina < JumpStaminaCost && CurrentStamina > 0.0f)
+	{
+		if (StaminaComponent)
+		{
+			float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
+			StaminaComponent->TryConsumeStamina(StaminaToConsume);
+		}
+
+		bIsJumping = true;
+		ACharacter::Jump();
+		// UE_LOG(LogTemp, Warning, TEXT("Jump executed, current stamina: %f"), StaminaComponent->GetCurrentStamina());
+	}
+	
+	/*else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Not enough stamina to jump"));
+	}
+	*/
+	
+}	
 
 void AInputCharacter::Landed(const FHitResult& Hit)
 {
@@ -124,7 +138,6 @@ void AInputCharacter::Move(const FInputActionValue& InputValue)
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// Add movement input
 		AddMovementInput(ForwardDirection, InputVector.Y);
 		AddMovementInput(RightDirection, InputVector.X);
 	}
