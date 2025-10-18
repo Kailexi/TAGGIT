@@ -103,6 +103,11 @@ void AInputCharacter::EndSprint()
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
 
+float AInputCharacter::GetStaminaForHUD() const
+{
+    return StaminaComponent ? StaminaComponent->GetCurrentStamina() : 0.0f;
+}
+
 
 
 
