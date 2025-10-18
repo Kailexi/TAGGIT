@@ -44,4 +44,7 @@ public:
 	bool CanPerformAction(float Amount = 0.0f) const;
 
 	void UpdateStamina(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = "Stamina")
+	float GetCurrentStamina() const;
 };

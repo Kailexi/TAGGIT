@@ -59,9 +59,12 @@ protected:
 		
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed;
-		
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SprintSpeed;
+	UPROPERTY(EditAnywhere, Category = "Movement");
+	float SprintCostPerSecond;
+	UPROPERTY(EditAnywhere, Category = "Movement");
+	float JumpStaminaCost;
 
 	bool bIsSprinting;
 };
