@@ -8,7 +8,7 @@ UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTTAGGIT_API UStaminaComponent : public UActorComponent
 {
 	GENERATED_BODY()
-	
+
 public:
 	UStaminaComponent();
 
@@ -25,13 +25,17 @@ public:
 	float MaxStamina = 1000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
-	float StaminaRegenRate = 100.0f;
+	float StaminaRegenRate = 250.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float RegenDelay = 5.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+	float StaminaThreshold = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Stamina")
 	bool bIsExhausted;
+
 
 private:
 	float RegenDelayRemaining;
@@ -44,4 +48,10 @@ public:
 	bool CanPerformAction(float Amount = 0.0f) const;
 
 	void UpdateStamina(float DeltaTime);
+
+	UFUNCTION(BlueprintCallable, Category = "Stamina")
+	float GetCurrentStamina() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Stamina")
+	float GetMaxStamina() const;
 };

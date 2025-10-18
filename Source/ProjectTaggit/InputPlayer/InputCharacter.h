@@ -15,7 +15,7 @@ class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaminaComponent* StaminaComponent;
-	
+
 protected:
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
@@ -34,34 +34,55 @@ protected:
 	class UInputAction* SprintAction;
 
 public:
-	// Sets default values for this character's properties
 	AInputCharacter();
 
 protected:
-	// Called when the game starts or when spawned
+
 	virtual void BeginPlay() override;
+	virtual void Landed(const FHitResult& Hit) override;
 
-public:	
-	// Called every frame
+public:
+
 	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
-	
+
 	void Move(const FInputActionValue& InputValue);
 	void Look(const FInputActionValue& InputValue);
-	void Jump();
 
+	void Jump();
 	void StartSprint();
 	void EndSprint();
-		
+
+
+	//Movement-speeds / states
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed;
-		
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SprintSpeed;
-
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsJumping;
+
+
+
+
+	//Stamina-relations
+	UPROPERTY(EditAnywhere, Category = "Stamina");
+	float SprintCostPerSecond;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+	float JumpStaminaCost = 250.0f;
+
+
+
+
+	//HUD Accessors
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	float GetStaminaForHUD() const;
+
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	float GetMaxStaminaForHUD() const;
+
 };
