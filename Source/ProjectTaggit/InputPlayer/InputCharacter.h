@@ -67,4 +67,8 @@ protected:
 	float JumpStaminaCost;
 
 	bool bIsSprinting;
+
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	float GetStaminaForHUD() const;
+
 };
