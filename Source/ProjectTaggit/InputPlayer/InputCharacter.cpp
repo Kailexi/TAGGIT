@@ -10,7 +10,7 @@ AInputCharacter::AInputCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	Camera = CreateDefaultSubobject<UCameraComponent>("Camera");	
+	Camera = CreateDefaultSubobject<UCameraComponent>("Camera");
 	Camera->SetupAttachment(GetRootComponent());
 	Camera->bUsePawnControlRotation = true;
 
@@ -31,7 +31,8 @@ void AInputCharacter::Tick(float DeltaTime)
 	if (bIsSprinting)
 	{
 		// Always try to drain stamina while sprinting
-		if (!StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime))
+		bool bConsumed = StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
+		if (!bConsumed || StaminaComponent->GetCurrentStamina() <= 0.0f)
 		{
 			EndSprint();
 		}
@@ -61,7 +62,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::Jump);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AInputCharacter::StartSprint);
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed , this, &AInputCharacter::EndSprint);
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
 	}
 }
 
@@ -75,38 +76,36 @@ float AInputCharacter::GetMaxStaminaForHUD() const
 	return StaminaComponent ? StaminaComponent->GetMaxStamina() : 0.0f;
 }
 
-bool bIsJumping = false;
-
 void AInputCharacter::Jump()
 {
 
 
 	float CurrentStamina = StaminaComponent ? StaminaComponent->GetCurrentStamina() : 0.0f;
 
-	if (StaminaComponent->CanPerformAction(StaminaComponent->StaminaThreshold))
+	if (StaminaComponent->CanPerformAction(JumpStaminaCost))
 	{
 
-			float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
-			StaminaComponent->TryConsumeStamina(StaminaToConsume);
-		
+		float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
+		StaminaComponent->TryConsumeStamina(StaminaToConsume);
+
 
 		bIsJumping = true;
 		ACharacter::Jump();
 		// UE_LOG(LogTemp, Warning, TEXT("Jump executed, current stamina: %f"), StaminaComponent->GetCurrentStamina());
 	}
-	
+
 	/*else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Not enough stamina to jump"));
 	}
 	*/
-	
-}	
+
+}
 
 void AInputCharacter::Landed(const FHitResult& Hit)
 {
-    Super::Landed(Hit);
-    bIsJumping = false; // Reset the flag when the character lands
+	Super::Landed(Hit);
+	bIsJumping = false; // Reset the flag when the character lands
 }
 
 void AInputCharacter::StartSprint()
