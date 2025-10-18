@@ -25,7 +25,7 @@ public:
 	float MaxStamina = 1000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
-	float StaminaRegenRate = 100.0f;
+	float StaminaRegenRate = 250.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float RegenDelay = 5.0f;
@@ -47,4 +47,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Stamina")
 	float GetCurrentStamina() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Stamina")
+	float GetMaxStamina() const;
 };

@@ -41,6 +41,8 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+    virtual void Landed(const FHitResult& Hit) override;
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -63,12 +65,15 @@ protected:
 	float SprintSpeed;
 	UPROPERTY(EditAnywhere, Category = "Movement");
 	float SprintCostPerSecond;
-	UPROPERTY(EditAnywhere, Category = "Movement");
-	float JumpStaminaCost;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+	float JumpStaminaCost = 250.0f;
 
 	bool bIsSprinting;
 
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetStaminaForHUD() const;
+
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	float GetMaxStaminaForHUD() const;
 
 };
