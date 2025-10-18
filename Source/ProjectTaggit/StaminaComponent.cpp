@@ -20,6 +20,16 @@ void UStaminaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 	UpdateStamina(DeltaTime);
 }
 
+float UStaminaComponent::GetCurrentStamina() const
+{
+	return CurrentStamina;
+}
+
+bool UStaminaComponent::CanPerformAction(float Amount) const
+{
+	return CurrentStamina >= Amount && !bIsExhausted;
+}
+
 bool UStaminaComponent::TryConsumeStamina(float Amount)
 {
 	if (CanPerformAction(Amount))
@@ -31,10 +41,7 @@ bool UStaminaComponent::TryConsumeStamina(float Amount)
 	return false;
 }
 
-bool UStaminaComponent::CanPerformAction(float Amount) const
-{
-	return CurrentStamina >= Amount && !bIsExhausted;
-}
+
 
 void UStaminaComponent::UpdateStamina(float DeltaTime)
 {
@@ -49,3 +56,5 @@ void UStaminaComponent::UpdateStamina(float DeltaTime)
 		bIsExhausted = CurrentStamina <= 0.0f;
 	}
 }
+
+

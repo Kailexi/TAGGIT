@@ -82,7 +82,7 @@ void AInputCharacter::Look(const FInputActionValue& InputValue)
 
 void AInputCharacter::Jump()
 {
-	if (StaminaComponent->TryConsumeStamina(250.0f)) // Example stamina cost for jumping
+	if (StaminaComponent->TryConsumeStamina(JumpStaminaCost)) 
 	{
 		ACharacter::Jump();
 	}
@@ -90,7 +90,7 @@ void AInputCharacter::Jump()
 
 void AInputCharacter::StartSprint()
 {
-	if (StaminaComponent->CanPerformAction(100.0f)) // Example stamina threshold for sprinting
+	if (StaminaComponent->CanPerformAction(SprintCostPerSecond))
 	{
 		bIsSprinting = true;
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
