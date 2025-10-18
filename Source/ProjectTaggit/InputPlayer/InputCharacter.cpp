@@ -25,6 +25,16 @@ void AInputCharacter::BeginPlay()
 void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Drain stamina while sprinting
+	if (bIsSprinting)
+	{
+		if (StaminaComponent && !StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime))
+		{
+			// Stop sprinting if stamina is depleted
+			EndSprint();
+		}
+	}
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
