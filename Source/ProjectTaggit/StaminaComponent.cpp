@@ -50,16 +50,18 @@ bool UStaminaComponent::TryConsumeStamina(float Amount)
 
 void UStaminaComponent::UpdateStamina(float DeltaTime)
 {
-	if (RegenDelayRemaining > 0.0f)
-	{
-		RegenDelayRemaining -= DeltaTime;
-	}
-	else if (CurrentStamina < MaxStamina)
-	{
-		CurrentStamina += StaminaRegenRate * DeltaTime;
-		CurrentStamina = FMath::Clamp(CurrentStamina, 0.0f, MaxStamina);
-		bIsExhausted = CurrentStamina <= 0.0f;
-	}
+    if (RegenDelayRemaining > 0.0f)
+    {
+        RegenDelayRemaining -= DeltaTime;
+    }
+    else if (CurrentStamina < MaxStamina)
+    {
+        CurrentStamina += StaminaRegenRate * DeltaTime;
+        CurrentStamina = FMath::Clamp(CurrentStamina, 0.0f, MaxStamina);
+    }
+
+    bIsExhausted = CurrentStamina <= 0.0f;
 }
+
 
 
