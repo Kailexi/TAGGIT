@@ -32,17 +32,21 @@ float UStaminaComponent::GetMaxStamina() const
 
 bool UStaminaComponent::CanPerformAction(float Amount) const
 {
-	return CurrentStamina >= Amount && !bIsExhausted;
+	return CurrentStamina >= Amount || (CurrentStamina > 0 && CurrentStamina <= StaminaThreshold);;
 }
 
 bool UStaminaComponent::TryConsumeStamina(float Amount)
 {
-    UE_LOG(LogTemp, Warning, TEXT("Trying to consume stamina: %f"), Amount);
+    //UE_LOG(LogTemp, Warning, TEXT("Trying to consume stamina: %f"), Amount);
+    
     if (CanPerformAction(Amount))
     {
-        CurrentStamina = FMath::Clamp(CurrentStamina - Amount, 0.0f, MaxStamina);
+        float StaminaToConsume = FMath::Min(CurrentStamina, Amount);
+        CurrentStamina = FMath::Clamp(CurrentStamina - StaminaToConsume, 0.0f, MaxStamina);
         RegenDelayRemaining = RegenDelay;
-        UE_LOG(LogTemp, Warning, TEXT("Stamina after consumption: %f"), CurrentStamina);
+        
+        //UE_LOG(LogTemp, Warning, TEXT("Stamina after consumption: %f"), CurrentStamina);
+        
         return true;
     }
     return false;
