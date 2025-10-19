@@ -17,7 +17,6 @@ class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 	UStaminaComponent* StaminaComponent;
 
 protected:
-
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputMappingContext* InputMapping;
 
@@ -26,7 +25,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* JumpAction;
-
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* LookAction;
 
@@ -55,6 +53,7 @@ protected:
 
 public:
 	virtual void Tick(float DeltaTime) override;
+
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
@@ -68,9 +67,6 @@ protected:
 	void ToggleCrouch();
 	void LogCurrentSpeed();
 
-
-
-	// Movement/states
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed = 500.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
@@ -81,22 +77,22 @@ protected:
 	float CrouchHeight = 50.0f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
 	FVector CrouchEyeOffset;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	FVector TargetCrouchEyeOffset;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float CrouchCameraTransitionSpeed = 5.0f;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsJumping;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsCrouching;
-
-	//Stamina 
 	UPROPERTY(EditAnywhere, Category = "Stamina")
 	float SprintCostPerSecond = 100.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float JumpStaminaCost = 250.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float CrouchStaminaCost = 50.0f;
-
-	// HUD Accessors
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetStaminaForHUD() const;
 	UFUNCTION(BlueprintCallable, Category = "HUD")
