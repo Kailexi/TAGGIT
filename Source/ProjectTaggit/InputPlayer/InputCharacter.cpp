@@ -1,5 +1,3 @@
-
-
 #include "ProjectTaggit/InputPlayer/InputCharacter.h"
 #include "InputMappingContext.h"
 #include "EnhancedInputSubsystems.h"
@@ -18,39 +16,13 @@ AInputCharacter::AInputCharacter()
 
 	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>("StaminaComponent");
 	CrouchEyeOffset = FVector(0.f);
-}
 
-void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
-{
-	if (HalfHeightAdjust == 0.f)
-	{
-		return;
-	}
-
-	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	CrouchEyeOffset.Z = -HalfHeightAdjust; // Adjust camera downward
-	GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
-}
-
-void AInputCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
-{
-	if (HalfHeightAdjust == 0.f)
-	{
-		return;
-	}
-
-	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	CrouchEyeOffset.Z = 0.0f; // Reset camera position
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-}
-
-void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
-{
-	if (Camera)
-	{
-		Camera->GetCameraView(DeltaTime, OutResult);
-		OutResult.Location += CrouchEyeOffset;
-	}
+	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+	
+	bIsSprinting = false;
+	bIsJumping = false;
+	bIsCrouching = false;
 }
 
 void AInputCharacter::BeginPlay()
@@ -75,11 +47,14 @@ void AInputCharacter::Tick(float DeltaTime)
 		}
 	}
 
-	// Interpolation logic for smooth camera transition when crouching/uncrouching
+	// Smoothly interpolate camera for crouch transitions
 	if (CrouchEyeOffset != FVector::ZeroVector)
 	{
 		CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, FVector::ZeroVector, DeltaTime, 5.0f);
 	}
+
+	LogCurrentSpeed();
+
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -103,9 +78,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AInputCharacter::StartCrouch);
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &AInputCharacter::EndCrouch);
-		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AInputCharacter::ToggleCrouch);
 	}
-
 }
 
 float AInputCharacter::GetStaminaForHUD() const
@@ -177,19 +150,10 @@ void AInputCharacter::EndCrouch()
 	}
 }
 
-void AInputCharacter::ToggleCrouch()
+void AInputCharacter::LogCurrentSpeed()
 {
-		UE_LOG(LogTemp, Log, TEXT("ToggleCrouch called, bIsCrouching: %d"), bIsCrouching);
-		if (bIsCrouching)
-		{
-			EndCrouch();
-		}
-		else
-		{
-			StartCrouch();
-		}
-	}
-
+	UE_LOG(LogTemp, Log, TEXT("Current Speed: %f"), GetVelocity().Size());
+}
 
 void AInputCharacter::Look(const FInputActionValue& InputValue)
 {
@@ -217,3 +181,20 @@ void AInputCharacter::Move(const FInputActionValue& InputValue)
 	}
 }
 
+void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	CrouchEyeOffset.Z -= HalfHeightAdjust;
+}
+
+void AInputCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	CrouchEyeOffset.Z += HalfHeightAdjust; 
+}
+
+void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
+{
+	Super::CalcCamera(DeltaTime, OutResult);
+	OutResult.Location += CrouchEyeOffset; 
+}
