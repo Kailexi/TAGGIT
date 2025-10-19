@@ -1,69 +1,215 @@
-#include "ProjectTaggit/InputPlayer/InputCharacter.h"
-#include "InputMappingContext.h"
-#include "EnhancedInputSubsystems.h"
-#include "EnhancedInputComponent.h"
-#include "Camera/CameraComponent.h"
+#include "InputCharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
+#include "Camera/CameraComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
 #include "ProjectTaggit/StaminaComponent.h"
+#include "Math/UnrealMathUtility.h"
 
 AInputCharacter::AInputCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	Camera = CreateDefaultSubobject<UCameraComponent>("Camera");
+	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(GetRootComponent());
 	Camera->bUsePawnControlRotation = true;
 
-	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>("StaminaComponent");
+	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>(TEXT("StaminaComponent"));
+
+	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
+
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+
+	CrouchEyeOffset = FVector(0.0f, 0.0f, 0.0f);
+	TargetCrouchEyeOffset = FVector(0.0f, 0.0f, 0.0f);
+
+	bIsSprinting = false;
+	bIsJumping = false;
+	bIsCrouching = false;
 }
 
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(InputMapping, 0);
+		}
+	}
 }
 
 void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (!StaminaComponent) return;
-
 	if (bIsSprinting)
 	{
-		// Always try to drain stamina while sprinting
-		bool bConsumed = StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
-		if (!bConsumed || StaminaComponent->GetCurrentStamina() <= 0.0f)
+		StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
+		if (StaminaComponent->GetCurrentStamina() <= 0.0f)
 		{
 			EndSprint();
 		}
 	}
+	CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
 }
-
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		// Get local player subsystem to add input mapping context
-
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-
-			Subsystem->AddMappingContext(InputMapping, 0);
-		}
-	}
-
-	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
-	{
-
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::Jump);
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AInputCharacter::StartSprint);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AInputCharacter::Jump);
+		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AInputCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AInputCharacter::ToggleCrouch);
 	}
+}
+
+void AInputCharacter::Move(const FInputActionValue& InputValue)
+{
+	FVector2D MovementVector = InputValue.Get<FVector2D>();
+
+	if (Controller != nullptr)
+	{
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		AddMovementInput(ForwardDirection, MovementVector.Y);
+
+		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		AddMovementInput(RightDirection, MovementVector.X);
+	}
+}
+
+void AInputCharacter::Look(const FInputActionValue& InputValue)
+{
+	FVector2D LookAxisVector = InputValue.Get<FVector2D>();
+
+	if (Controller != nullptr)
+	{
+		AddControllerYawInput(LookAxisVector.X);
+		AddControllerPitchInput(LookAxisVector.Y);
+	}
+}
+
+void AInputCharacter::Jump()
+{
+	if (StaminaComponent->CanPerformAction(JumpStaminaCost) && !bIsJumping)
+	{
+		bool bCanJump = CanJump();
+		if (!bCanJump && bIsCrouching)
+		{
+			EndCrouch();
+			bCanJump = CanJump();
+		}
+		if (bCanJump)
+		{
+			StaminaComponent->TryConsumeStamina(JumpStaminaCost);
+			bIsJumping = true;
+			Super::Jump();
+		}
+	}
+}
+
+void AInputCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	bIsJumping = false;
+}
+
+void AInputCharacter::StartSprint()
+{
+	if (StaminaComponent->GetCurrentStamina() > 0.0f && !bIsSprinting && !bIsCrouching)
+	{
+		bIsSprinting = true;
+		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+		UE_LOG(LogTemp, Log, TEXT("Sprint started, stamina: %f"), StaminaComponent->GetCurrentStamina());
+	}
+}
+
+void AInputCharacter::EndSprint()
+{
+	bIsSprinting = false;
+	if (!bIsCrouching)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	}
+	UE_LOG(LogTemp, Log, TEXT("Sprint ended, stamina: %f"), StaminaComponent->GetCurrentStamina());
+}
+
+void AInputCharacter::StartCrouch()
+{
+	if (StaminaComponent->GetCurrentStamina() >= CrouchStaminaCost && !bIsCrouching)
+	{
+		UE_LOG(LogTemp, Log, TEXT("StartCrouch called, stamina: %f"), StaminaComponent->GetCurrentStamina());
+		StaminaComponent->TryConsumeStamina(CrouchStaminaCost);
+		bIsSprinting = false;
+		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+		Crouch();
+		bIsCrouching = true;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot crouch: Insufficient stamina or already crouching"));
+	}
+}
+
+void AInputCharacter::EndCrouch()
+{
+	if (bIsCrouching)
+	{
+		UE_LOG(LogTemp, Log, TEXT("EndCrouch called"));
+		UnCrouch();
+		bIsCrouching = false;
+		GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	}
+}
+
+void AInputCharacter::ToggleCrouch()
+{
+	if (!bIsCrouching)
+	{
+		StartCrouch();
+	}
+	else
+	{
+		EndCrouch();
+	}
+}
+
+void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	TargetCrouchEyeOffset.Z = -HalfHeightAdjust;
+}
+
+void AInputCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	TargetCrouchEyeOffset.Z = 0.0f;
+}
+
+void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
+{
+	Super::CalcCamera(DeltaTime, OutResult);
+	OutResult.Location += CrouchEyeOffset;
+}
+
+void AInputCharacter::LogCurrentSpeed()
+{
+	FVector Velocity = GetCharacterMovement()->Velocity;
+	float Speed = Velocity.Size2D();
+	FString MovementState = bIsSprinting ? TEXT("Sprinting") : bIsCrouching ? TEXT("Crouching") : bIsJumping ? TEXT("Jumping") : TEXT("Walking");
+	UE_LOG(LogTemp, Log, TEXT("Current Speed: %f cm/s (%s)"), Speed, *MovementState);
 }
 
 float AInputCharacter::GetStaminaForHUD() const
@@ -73,80 +219,5 @@ float AInputCharacter::GetStaminaForHUD() const
 
 float AInputCharacter::GetMaxStaminaForHUD() const
 {
-	return StaminaComponent ? StaminaComponent->GetMaxStamina() : 0.0f;
-}
-
-void AInputCharacter::Jump()
-{
-
-
-	float CurrentStamina = StaminaComponent ? StaminaComponent->GetCurrentStamina() : 0.0f;
-
-	if (StaminaComponent->CanPerformAction(JumpStaminaCost))
-	{
-
-		float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
-		StaminaComponent->TryConsumeStamina(StaminaToConsume);
-
-
-		bIsJumping = true;
-		ACharacter::Jump();
-		// UE_LOG(LogTemp, Warning, TEXT("Jump executed, current stamina: %f"), StaminaComponent->GetCurrentStamina());
-	}
-
-	/*else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Not enough stamina to jump"));
-	}
-	*/
-
-}
-
-void AInputCharacter::Landed(const FHitResult& Hit)
-{
-	Super::Landed(Hit);
-	bIsJumping = false; // Reset the flag when the character lands
-}
-
-void AInputCharacter::StartSprint()
-{
-	if (!StaminaComponent) return;
-
-	if (StaminaComponent->CanPerformAction(SprintCostPerSecond))
-	{
-		bIsSprinting = true;
-		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
-	}
-}
-
-void AInputCharacter::EndSprint()
-{
-	bIsSprinting = false;
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-}
-
-void AInputCharacter::Move(const FInputActionValue& InputValue)
-{
-	FVector2D InputVector = InputValue.Get<FVector2D>();
-	if (IsValid(Controller))
-	{
-		//Get forward/backward direction
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		AddMovementInput(ForwardDirection, InputVector.Y);
-		AddMovementInput(RightDirection, InputVector.X);
-	}
-}
-
-void AInputCharacter::Look(const FInputActionValue& InputValue)
-{
-	FVector2D InputVector = InputValue.Get<FVector2D>();
-	if (!Controller) return;
-
-	AddControllerYawInput(InputVector.X);
-	AddControllerPitchInput(InputVector.Y);
+	return StaminaComponent ? StaminaComponent->GetMaxStamina() : 1000.0f;
 }
