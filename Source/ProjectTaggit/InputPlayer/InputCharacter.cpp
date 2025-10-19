@@ -85,12 +85,15 @@ void AInputCharacter::Jump()
 	if (StaminaComponent->CanPerformAction(JumpStaminaCost))
 	{
 
-		float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
-		StaminaComponent->TryConsumeStamina(StaminaToConsume);
+		if (!bIsJumping)
+		{
+			float StaminaToConsume = FMath::Min(CurrentStamina, JumpStaminaCost);
+			StaminaComponent->TryConsumeStamina(StaminaToConsume);
+			bIsJumping = true;
+			ACharacter::Jump();
+		}
 
 
-		bIsJumping = true;
-		ACharacter::Jump();
 		// UE_LOG(LogTemp, Warning, TEXT("Jump executed, current stamina: %f"), StaminaComponent->GetCurrentStamina());
 	}
 
