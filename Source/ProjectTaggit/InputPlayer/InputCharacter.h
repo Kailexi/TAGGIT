@@ -1,5 +1,3 @@
-
-
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -52,30 +50,27 @@ public:
 	virtual void CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult) override;
 
 protected:
-
 	virtual void BeginPlay() override;
 	virtual void Landed(const FHitResult& Hit) override;
 
 public:
-
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
-
 	void Move(const FInputActionValue& InputValue);
 	void Look(const FInputActionValue& InputValue);
-
 	void Jump();
 	void StartSprint();
 	void EndSprint();
 	void StartCrouch();
 	void EndCrouch();
 	void ToggleCrouch();
+	void LogCurrentSpeed();
 
 
 
-	// Movement-speeds / states
+	// Movement/states
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed = 500.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
@@ -93,9 +88,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsCrouching;
 
-	// Stamina-relations
+	//Stamina 
 	UPROPERTY(EditAnywhere, Category = "Stamina")
-	float SprintCostPerSecond;
+	float SprintCostPerSecond = 100.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float JumpStaminaCost = 250.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
@@ -104,9 +99,6 @@ protected:
 	// HUD Accessors
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetStaminaForHUD() const;
-
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetMaxStaminaForHUD() const;
-
 };
-
