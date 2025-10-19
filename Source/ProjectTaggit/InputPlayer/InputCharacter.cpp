@@ -56,10 +56,7 @@ void AInputCharacter::Tick(float DeltaTime)
 			EndSprint();
 		}
 	}
-
 	CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
-
-	LogCurrentSpeed();
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -106,11 +103,20 @@ void AInputCharacter::Look(const FInputActionValue& InputValue)
 
 void AInputCharacter::Jump()
 {
-	if (StaminaComponent->GetCurrentStamina() >= JumpStaminaCost && !bIsJumping)
+	if (StaminaComponent->CanPerformAction(JumpStaminaCost) && !bIsJumping)
 	{
-		StaminaComponent->TryConsumeStamina(JumpStaminaCost);
-		bIsJumping = true;
-		Super::Jump();
+		bool bCanJump = CanJump();
+		if (!bCanJump && bIsCrouching)
+		{
+			EndCrouch();
+			bCanJump = CanJump();
+		}
+		if (bCanJump)
+		{
+			StaminaComponent->TryConsumeStamina(JumpStaminaCost);
+			bIsJumping = true;
+			Super::Jump();
+		}
 	}
 }
 
