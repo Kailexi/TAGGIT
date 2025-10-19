@@ -1,3 +1,5 @@
+
+
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -33,8 +35,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* SprintAction;
 
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
+	class UInputAction* CrouchAction;
+
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
+	class UInputAction* SlideAction;
+
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
+	class UInputAction* MantleAction;
+
 public:
 	AInputCharacter();
+
+	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+	virtual void CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult) override;
 
 protected:
 
@@ -54,31 +69,39 @@ protected:
 	void Jump();
 	void StartSprint();
 	void EndSprint();
+	void StartCrouch();
+	void EndCrouch();
+	void ToggleCrouch();
 
 
-	//Movement-speeds / states
+
+	// Movement-speeds / states
 	UPROPERTY(EditAnywhere, Category = "Movement")
-	float WalkSpeed;
+	float WalkSpeed = 500.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
-	float SprintSpeed;
+	float SprintSpeed = 1000.0f;
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	float CrouchSpeed = 300.0f;
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	float CrouchHeight = 50.0f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
+	FVector CrouchEyeOffset;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsJumping;
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsCrouching;
 
-
-
-
-	//Stamina-relations
-	UPROPERTY(EditAnywhere, Category = "Stamina");
+	// Stamina-relations
+	UPROPERTY(EditAnywhere, Category = "Stamina")
 	float SprintCostPerSecond;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
 	float JumpStaminaCost = 250.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+	float CrouchStaminaCost = 50.0f;
 
-
-
-
-	//HUD Accessors
+	// HUD Accessors
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetStaminaForHUD() const;
 
@@ -86,3 +109,4 @@ protected:
 	float GetMaxStaminaForHUD() const;
 
 };
+
