@@ -54,7 +54,7 @@ void AInputCharacter::Tick(float DeltaTime)
 	if (bIsSliding)
 	{
 		SlideTimeRemaining -= DeltaTime;
-		GetCharacterMovement()->MaxWalkSpeed = SlideSpeed;
+		GetCharacterMovement()->MaxWalkSpeed = SlideSpeed; 
 		GetCharacterMovement()->MaxWalkSpeedCrouched = SlideSpeed; // Maintain slide speed
 		if (SlideTimeRemaining <= 0.0f)
 		{
@@ -82,7 +82,21 @@ void AInputCharacter::Tick(float DeltaTime)
 		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 	}
 
-	CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
+	// Use different interpolation and speed for crouch vs uncrouch
+	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z) // Uncrouching (moving up)
+	{
+		CrouchEyeOffset = FMath::VInterpConstantTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, UncrouchCameraTransitionSpeed);
+		
+		// UE_LOG(LogTemp, Log, TEXT("Uncrouching - CrouchEyeOffset: %s, TransitionSpeed: %f"), *CrouchEyeOffset.ToString(), UncrouchCameraTransitionSpeed);
+	
+	}
+	else // Crouching or no movement
+	{
+		CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
+		
+		// UE_LOG(LogTemp, Log, TEXT("Crouching - CrouchEyeOffset: %s, TransitionSpeed: %f"), *CrouchEyeOffset.ToString(), CrouchCameraTransitionSpeed);
+	
+	}
 
 	//LogCurrentSpeed();
 }
@@ -119,7 +133,7 @@ void AInputCharacter::Move(const FInputActionValue& InputValue)
 
 		if (bIsSliding)
 		{
-			//Lock forward/backward, allow slight left/right adjustments 
+			//Lock forward/backward, allow slight left/right adjustments
 			float SlideAdjustmentScale = 0.3f;
 			AddMovementInput(RightDirection, MovementVector.X * SlideAdjustmentScale);
 		}
@@ -173,6 +187,7 @@ void AInputCharacter::StartSprint()
 	{
 		bIsSprinting = true;
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+		
 		// UE_LOG(LogTemp, Log, TEXT("Sprint started, stamina: %f"), StaminaComponent->GetCurrentStamina());
 	}
 }
@@ -184,6 +199,7 @@ void AInputCharacter::EndSprint()
 	{
 		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 	}
+	
 	// UE_LOG(LogTemp, Log, TEXT("Sprint ended, stamina: %f"), StaminaComponent->GetCurrentStamina());
 }
 
@@ -192,6 +208,7 @@ void AInputCharacter::StartCrouch()
 	if (StaminaComponent->GetCurrentStamina() >= CrouchStaminaCost && !bIsCrouching)
 	{
 		//UE_LOG(LogTemp, Log, TEXT("StartCrouch called, stamina: %f"), StaminaComponent->GetCurrentStamina());
+
 		StaminaComponent->TryConsumeStamina(CrouchStaminaCost);
 		bIsSprinting = false;
 		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
@@ -209,6 +226,7 @@ void AInputCharacter::EndCrouch()
 	if (bIsCrouching)
 	{
 		// UE_LOG(LogTemp, Log, TEXT("EndCrouch called"));
+
 		UnCrouch();
 		bIsCrouching = false;
 		GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
@@ -231,12 +249,16 @@ void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
 	TargetCrouchEyeOffset.Z = -HalfHeightAdjust;
+	
+	// UE_LOG(LogTemp, Log, TEXT("OnStartCrouch: HalfHeightAdjust = %f"), HalfHeightAdjust);
 }
 
 void AInputCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
 	TargetCrouchEyeOffset.Z = 0.0f;
+	
+	// UE_LOG(LogTemp, Log, TEXT("OnEndCrouch: HalfHeightAdjust = %f"), HalfHeightAdjust);
 }
 
 void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)

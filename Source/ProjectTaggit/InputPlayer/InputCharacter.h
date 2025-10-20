@@ -78,7 +78,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float CrouchSpeed = 300.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
-	float CrouchHeight = 50.0f;
+	float CrouchHeight = 60.0f; 
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SlideSpeed = 1200.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
@@ -93,7 +93,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CameraSettings")
 	FVector TargetCrouchEyeOffset;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CameraSettings")
-	float CrouchCameraTransitionSpeed = 3.0f;
+	float CrouchCameraTransitionSpeed = 4.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CameraSettings")
+	float UncrouchCameraTransitionSpeed = 2.0f; 
 
 	// Boolean states
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
