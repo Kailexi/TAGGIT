@@ -29,6 +29,8 @@ AInputCharacter::AInputCharacter()
 	bIsSprinting = false;
 	bIsJumping = false;
 	bIsCrouching = false;
+	bIsSliding = false;
+	SlideTimeRemaining = 0.0f;
 }
 
 void AInputCharacter::BeginPlay()
@@ -67,10 +69,17 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	{
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
+		
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AInputCharacter::Jump);
+		
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AInputCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
+		
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AInputCharacter::ToggleCrouch);
+		
+		EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Triggered, this, &AInputCharacter::StartSlide);
+		EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Triggered, this, &AInputCharacter::EndSlide);
+	
 	}
 }
 
@@ -210,6 +219,46 @@ void AInputCharacter::LogCurrentSpeed()
 	float Speed = Velocity.Size2D();
 	FString MovementState = bIsSprinting ? TEXT("Sprinting") : bIsCrouching ? TEXT("Crouching") : bIsJumping ? TEXT("Jumping") : TEXT("Walking");
 	UE_LOG(LogTemp, Log, TEXT("Current Speed: %f cm/s (%s)"), Speed, *MovementState);
+}
+
+void AInputCharacter::StartSlide()
+{
+	if (StaminaComponent->CanPerformAction(SlideStaminaCost) && !bIsSliding && !bIsJumping && bIsSprinting)
+	{
+		// Ensure character is crouched during slide
+		if (!bIsCrouching)
+		{
+			StartCrouch();
+		}
+
+		// Consume stamina and start sliding
+		StaminaComponent->TryConsumeStamina(SlideStaminaCost);
+		bIsSliding = true;
+		SlideTimeRemaining = SlideDuration;
+		GetCharacterMovement()->MaxWalkSpeed = SlideSpeed;
+		GetCharacterMovement()->GroundFriction = 0.5f; // Reduce friction for smooth sliding
+		GetCharacterMovement()->BrakingDecelerationWalking = 100.0f; // Slow deceleration to maintain momentum
+
+		UE_LOG(LogTemp, Log, TEXT("Slide started, stamina: %f"), StaminaComponent->GetCurrentStamina());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot slide: Insufficient stamina, already sliding, not sprinting, or jumping"));
+	}
+}
+
+void AInputCharacter::EndSlide()
+{
+	if (bIsSliding)
+	{
+		bIsSliding = false;
+		SlideTimeRemaining = 0.0f;
+		GetCharacterMovement()->GroundFriction = 8.0f; // Restore default friction
+		GetCharacterMovement()->BrakingDecelerationWalking = 2048.0f; // Restore default deceleration
+		GetCharacterMovement()->MaxWalkSpeed = bIsCrouching ? CrouchSpeed : (bIsSprinting ? SprintSpeed : WalkSpeed);
+
+		UE_LOG(LogTemp, Log, TEXT("Slide ended, stamina: %f"), StaminaComponent->GetCurrentStamina());
+	}
 }
 
 float AInputCharacter::GetStaminaForHUD() const
