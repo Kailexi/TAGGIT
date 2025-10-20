@@ -25,6 +25,7 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* JumpAction;
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* LookAction;
 
@@ -69,8 +70,7 @@ protected:
 	void StartSlide();
 	void EndSlide();
 
-
-	//	Speeds/Durations
+	// Speeds/Durations
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float WalkSpeed = 500.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
@@ -83,17 +83,19 @@ protected:
 	float SlideSpeed = 1200.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SlideDuration = 1.0f;
-	float SlideTimeRemaining;
 
-	//	Crouching parameters
+	float SlideTimeRemaining;
+	FVector SlideDirection;
+
+	// Crouching parameters
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "CameraSettings")
 	FVector CrouchEyeOffset;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CameraSettings")
 	FVector TargetCrouchEyeOffset;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CameraSettings")
-	float CrouchCameraTransitionSpeed = 5.0f;
-		
-	//Boolean states
+	float CrouchCameraTransitionSpeed = 3.0f;
+
+	// Boolean states
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
@@ -103,8 +105,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSliding;
 
-
-	//Stamina relations
+	// Stamina relations
 	UPROPERTY(EditAnywhere, Category = "Stamina")
 	float SprintCostPerSecond = 100.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
