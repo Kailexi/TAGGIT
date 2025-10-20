@@ -33,10 +33,10 @@ protected:
 	class UInputAction* SprintAction;
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
-	class UInputAction* CrouchAction;
+	class UInputAction* CrouchOrSlideAction; 
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
-	class UInputAction* SlideAction;
+	class UInputAction* ToggleCrouchOrSlideAction; 
 
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* MantleAction;
@@ -65,10 +65,12 @@ protected:
 	void EndSprint();
 	void StartCrouch();
 	void EndCrouch();
-	void ToggleCrouch();
-	void LogCurrentSpeed();
+	void CrouchOrSlideToggle(); 
+	void CrouchOrSlideHoldStart(); 
+	void CrouchOrSlideHoldEnd(); 
 	void StartSlide();
 	void EndSlide();
+	void LogCurrentSpeed();
 
 	// Speeds/Durations
 	UPROPERTY(EditAnywhere, Category = "Movement")
@@ -78,13 +80,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float CrouchSpeed = 300.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
-	float CrouchHeight = 60.0f; 
+	float CrouchHeight = 60.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SlideSpeed = 1200.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float SlideDuration = 1.0f;
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	float SlideCooldown = 0.5f;
 
 	float SlideTimeRemaining;
+	float SlideCooldownRemaining;
 	FVector SlideDirection;
 
 	// Crouching parameters
@@ -93,9 +98,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CameraSettings")
 	FVector TargetCrouchEyeOffset;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CameraSettings")
-	float CrouchCameraTransitionSpeed = 4.0f;
+	float CrouchCameraTransitionSpeed = 3.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CameraSettings")
-	float UncrouchCameraTransitionSpeed = 2.0f; 
+	float UncrouchCameraTransitionSpeed = 1.0f;
 
 	// Boolean states
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
@@ -106,6 +111,9 @@ protected:
 	bool bIsCrouching;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSliding;
+
+	bool bCrouchToggled = false; 
+	bool bCrouchKeyHeld = false; 
 
 	// Stamina relations
 	UPROPERTY(EditAnywhere, Category = "Stamina")
