@@ -55,7 +55,7 @@ void AInputCharacter::Tick(float DeltaTime)
 	{
 		SlideTimeRemaining -= DeltaTime;
 		GetCharacterMovement()->MaxWalkSpeed = SlideSpeed; 
-		GetCharacterMovement()->MaxWalkSpeedCrouched = SlideSpeed; // Maintain slide speed
+		GetCharacterMovement()->MaxWalkSpeedCrouched = SlideSpeed;
 		if (SlideTimeRemaining <= 0.0f)
 		{
 			EndSlide();
