@@ -154,4 +154,21 @@ protected:
 	float GetStaminaForHUD() const;
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetMaxStaminaForHUD() const;
+
+	// Animation variables
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsSprinting = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsJumping = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsCrouching = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsSliding = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsChargingLeap = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	float AnimSpeed = 0.0f;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	float AnimVerticalVelocity = 0.0f;
+
 };

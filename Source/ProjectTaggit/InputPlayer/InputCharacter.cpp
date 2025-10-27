@@ -56,26 +56,30 @@ void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	const FVector Velocity = GetVelocity();
+	AnimSpeed = Velocity.Size2D();
+	AnimVerticalVelocity = Velocity.Z;
+
+	bAnimIsSprinting = bIsSprinting;
+	bAnimIsJumping = bIsJumping;
+	bAnimIsCrouching = bIsCrouching;
+	bAnimIsSliding = bIsSliding;
+	bAnimIsChargingLeap = bIsChargingLeap;
+
 	if (bIsSliding)
 	{
 		SlideTimeRemaining -= DeltaTime;
 		GetCharacterMovement()->MaxWalkSpeed = SlideSpeed;
 		GetCharacterMovement()->MaxWalkSpeedCrouched = SlideSpeed;
-		if (SlideTimeRemaining <= 0.0f)
-		{
-			EndSlide();
-		}
+		if (SlideTimeRemaining <= 0.0f) EndSlide();
 	}
+	
 	else if (bIsSprinting)
 	{
-		if (GetVelocity().Size2D() > 0.0f)
-		{
-			StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
-		}
-		if (StaminaComponent->GetCurrentStamina() <= 0.0f)
-		{
-			EndSprint();
-		}
+		if (AnimSpeed > 0.0f) StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
+		
+		if (StaminaComponent->GetCurrentStamina() <= 0.0f) EndSprint();
+		
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 	}
@@ -90,20 +94,13 @@ void AInputCharacter::Tick(float DeltaTime)
 		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 	}
 
-	if (SlideCooldownRemaining > 0.0f)
-	{
-		SlideCooldownRemaining -= DeltaTime;
-	}
-
+	if (SlideCooldownRemaining > 0.0f) SlideCooldownRemaining -= DeltaTime;
+	
 	// Use different interpolation and speed for crouch vs uncrouch
 	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z)
-	{
 		CrouchEyeOffset = FMath::VInterpConstantTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, UncrouchCameraTransitionSpeed);
-	}
 	else
-	{
 		CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
-	}
 
 	if (bIsChargingLeap)
 	{
@@ -126,7 +123,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AInputCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
 		
-		//Toggle crouch/slide
+		//Hold crouch/slide
 		EnhancedInputComponent->BindAction(CrouchOrSlideAction, ETriggerEvent::Started, this, &AInputCharacter::CrouchOrSlideHoldStart);
 		EnhancedInputComponent->BindAction(CrouchOrSlideAction, ETriggerEvent::Completed, this, &AInputCharacter::CrouchOrSlideHoldEnd);
 		
