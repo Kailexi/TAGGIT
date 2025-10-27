@@ -19,21 +19,22 @@ AInputCharacter::AInputCharacter()
 	StaminaComponent = CreateDefaultSubobject<UStaminaComponent>(TEXT("StaminaComponent"));
 
 	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
-
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 
-	CrouchEyeOffset = FVector(0.0f, 0.0f, 0.0f);
-	TargetCrouchEyeOffset = FVector(0.0f, 0.0f, 0.0f);
+	CrouchEyeOffset = FVector::ZeroVector;
+	TargetCrouchEyeOffset = FVector::ZeroVector;
 
 	bIsSprinting = false;
 	bIsJumping = false;
 	bIsCrouching = false;
 	bIsSliding = false;
+	bIsChargingLeap = false;
+	LeapChargeTime = 0.0f;
 	SlideTimeRemaining = 0.0f;
 	SlideCooldownRemaining = 0.0f;
 	SlideDirection = FVector::ZeroVector;
-
+	
 	bCrouchToggled = false;
 	bCrouchKeyHeld = false;
 }
@@ -67,8 +68,7 @@ void AInputCharacter::Tick(float DeltaTime)
 	}
 	else if (bIsSprinting)
 	{
-		FVector Velocity = GetCharacterMovement()->Velocity;
-		if (Velocity.Size2D() > 0.0f)
+		if (GetVelocity().Size2D() > 0.0f)
 		{
 			StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
 		}
@@ -106,6 +106,10 @@ void AInputCharacter::Tick(float DeltaTime)
 	}
 
 	if (bIsChargingLeap)
+	{
+		LeapChargeTime += DeltaTime;
+		LeapChargeTime = FMath::Min(LeapChargeTime, LeapMaxChargeTime);
+	}
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -116,42 +120,43 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	{
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
-
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AInputCharacter::Jump);
+		
+		//Sprint
 
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AInputCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
-
-		//Hold crouch/slide
+		
+		//Toggle crouch/slide
 		EnhancedInputComponent->BindAction(CrouchOrSlideAction, ETriggerEvent::Started, this, &AInputCharacter::CrouchOrSlideHoldStart);
 		EnhancedInputComponent->BindAction(CrouchOrSlideAction, ETriggerEvent::Completed, this, &AInputCharacter::CrouchOrSlideHoldEnd);
-
+		
 		//Toggle crouch/slide
 		EnhancedInputComponent->BindAction(ToggleCrouchOrSlideAction, ETriggerEvent::Started, this, &AInputCharacter::CrouchOrSlideToggle);
+		
+		//Jump/Leap
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::StartJumpCharge);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AInputCharacter::ReleaseJump);
 	}
 }
 
 void AInputCharacter::Move(const FInputActionValue& InputValue)
 {
 	FVector2D MovementVector = InputValue.Get<FVector2D>();
+	if (!Controller) return;
 
-	if (Controller != nullptr)
+	const FRotator Rotation = Controller->GetControlRotation();
+	const FRotator YawRotation(0, Rotation.Yaw, 0);
+	const FVector Forward = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	const FVector Right = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+
+	if (bIsSliding)
 	{
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		if (bIsSliding)
-		{
-			float SlideAdjustmentScale = 0.3f;
-			AddMovementInput(RightDirection, MovementVector.X * SlideAdjustmentScale);
-		}
-		else
-		{
-			AddMovementInput(ForwardDirection, MovementVector.Y);
-			AddMovementInput(RightDirection, MovementVector.X);
-		}
+		AddMovementInput(Right, MovementVector.X * 0.3f);
+	}
+	else
+	{
+		AddMovementInput(Forward, MovementVector.Y);
+		AddMovementInput(Right, MovementVector.X);
 	}
 }
 
@@ -166,25 +171,63 @@ void AInputCharacter::Look(const FInputActionValue& InputValue)
 	}
 }
 
-
-//Jump
-void AInputCharacter::Jump()
+void AInputCharacter::StartJumpCharge()
 {
-	if (StaminaComponent->CanPerformAction(JumpStaminaCost) && !bIsJumping)
+	if (bIsChargingLeap || bIsJumping || bIsSliding || !CanJump()) return;
+
+	if (bIsCrouching) EndCrouch();
+
+	bIsChargingLeap = true;
+	LeapChargeTime = 0.0f;
+}
+
+void AInputCharacter::ReleaseJump()
+{
+	if (!bIsChargingLeap)
 	{
-		bool bCanJump = CanJump();
-		if (!bCanJump && bIsCrouching)
-		{
-			EndCrouch();
-			bCanJump = CanJump();
-		}
-		if (bCanJump)
+		if (CanJump() && StaminaComponent->CanPerformAction(JumpStaminaCost))
 		{
 			StaminaComponent->TryConsumeStamina(JumpStaminaCost);
 			bIsJumping = true;
 			Super::Jump();
 		}
+		return;
 	}
+
+	bIsChargingLeap = false;
+	bIsJumping = true;
+
+	const bool bIsLeap = (LeapChargeTime >= LeapMinChargeTime);
+	const float ChargeFraction = bIsLeap
+		? FMath::Clamp((LeapChargeTime - LeapMinChargeTime) / (LeapMaxChargeTime - LeapMinChargeTime), 0.0f, 1.0f)
+		: 0.0f;
+
+	const float TotalStamina = JumpStaminaCost + (bIsLeap ? LeapExtraStaminaCost * ChargeFraction : 0.0f);
+
+	if (!StaminaComponent->CanPerformAction(TotalStamina))
+	{
+		bIsJumping = false;
+		return;
+	}
+
+	StaminaComponent->TryConsumeStamina(TotalStamina);
+
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	const float OriginalJumpZ = MoveComp->JumpZVelocity;
+
+	MoveComp->JumpZVelocity *= (1.0f + ChargeFraction * (LeapHeightMultiplier - 1.0f));
+
+	if (bIsCrouching) EndCrouch();
+
+	Super::Jump();
+
+	if (bIsLeap)
+	{
+		const FVector ForwardBoost = GetActorForwardVector() * (LeapForwardBoost * ChargeFraction);
+		MoveComp->Velocity += ForwardBoost;
+	}
+
+	MoveComp->JumpZVelocity = OriginalJumpZ;
 }
 
 void AInputCharacter::Landed(const FHitResult& Hit)
@@ -193,11 +236,9 @@ void AInputCharacter::Landed(const FHitResult& Hit)
 	bIsJumping = false;
 }
 
-
-//Sprint
 void AInputCharacter::StartSprint()
 {
-	if (StaminaComponent->GetCurrentStamina() > 0.0f && !bIsSprinting && !bIsCrouching)
+	if (!bIsSprinting && !bIsCrouching && !bIsSliding)
 	{
 		bIsSprinting = true;
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
@@ -206,9 +247,9 @@ void AInputCharacter::StartSprint()
 
 void AInputCharacter::EndSprint()
 {
-	bIsSprinting = false;
-	if (!bIsCrouching)
+	if (bIsSprinting)
 	{
+		bIsSprinting = false;
 		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 	}
 }
@@ -221,13 +262,8 @@ void AInputCharacter::StartCrouch()
 	{
 		StaminaComponent->TryConsumeStamina(CrouchStaminaCost);
 		bIsSprinting = false;
-		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
 		Crouch();
 		bIsCrouching = true;
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Cannot crouch: Insufficient stamina or already crouching"));
 	}
 }
 
@@ -241,8 +277,6 @@ void AInputCharacter::EndCrouch()
 		bCrouchToggled = false;
 	}
 }
-
-
 
 void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
@@ -262,108 +296,54 @@ void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
 	OutResult.Location += CrouchEyeOffset;
 }
 
-
-//	Debug
-void AInputCharacter::LogCurrentSpeed()
-{
-	FVector Velocity = GetCharacterMovement()->Velocity;
-	float Speed = Velocity.Size2D();
-	
-	FString MovementState = bIsSliding ? TEXT("Sliding") : bIsSprinting ? TEXT("Sprinting") : bIsCrouching ? TEXT("Crouching") : bIsJumping ? TEXT("Jumping") : TEXT("Walking");
-	UE_LOG(LogTemp, Log, TEXT("Current Speed: %f cm/s (%s), MaxWalkSpeed: %f, MaxWalkSpeedCrouched: %f, Velocity: %s"),
-		Speed, *MovementState, GetCharacterMovement()->MaxWalkSpeed, GetCharacterMovement()->MaxWalkSpeedCrouched, *Velocity.ToString());
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow,
-			FString::Printf(TEXT("Speed: %f cm/s (%s), MaxWalkSpeed: %f, Crouched: %s"),
-				Speed, *MovementState, GetCharacterMovement()->MaxWalkSpeed, bIsCrouching ? TEXT("Yes") : TEXT("No")));
-	}
-}
-
-// Slide
 void AInputCharacter::StartSlide()
 {
-	if (StaminaComponent->CanPerformAction(SlideStaminaCost) && !bIsSliding && !bIsJumping && bIsSprinting && GetCharacterMovement()->IsMovingOnGround() && SlideCooldownRemaining <= 0.0f)
-	{
-		if (!bIsCrouching)
-		{
-			StartCrouch();
-		}
-		else
-		{
-			GetCharacterMovement()->MaxWalkSpeed = SlideSpeed;
-			GetCharacterMovement()->MaxWalkSpeedCrouched = SlideSpeed;
-		}
+	if (!StaminaComponent->CanPerformAction(SlideStaminaCost) || bIsSliding || bIsJumping || !bIsSprinting || !GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f)
+		return;
 
-		StaminaComponent->TryConsumeStamina(SlideStaminaCost);
-		bIsSliding = true;
-		SlideTimeRemaining = SlideDuration;
-		SlideCooldownRemaining = SlideCooldown;
+	if (!bIsCrouching) StartCrouch();
 
-		GetCharacterMovement()->GroundFriction = 0.5f;
-		GetCharacterMovement()->BrakingDecelerationWalking = 50.0f;
+	StaminaComponent->TryConsumeStamina(SlideStaminaCost);
+	bIsSliding = true;
+	SlideTimeRemaining = SlideDuration;
+	SlideCooldownRemaining = SlideCooldown;
 
-		FVector CurrentVelocity = GetCharacterMovement()->Velocity;
-		if (CurrentVelocity.Size2D() > 0.0f)
-		{
-			SlideDirection = CurrentVelocity.GetSafeNormal2D();
-		}
-		else
-		{
-			SlideDirection = GetActorForwardVector();
-		}
-		FVector SlideVelocity = SlideDirection * SlideSpeed;
-		SlideVelocity.Z = CurrentVelocity.Z;
-		GetCharacterMovement()->Velocity = SlideVelocity;
+	GetCharacterMovement()->GroundFriction = 0.5f;
+	GetCharacterMovement()->BrakingDecelerationWalking = 50.0f;
 
-		UE_LOG(LogTemp, Log, TEXT("Slide started, speed set to: %f, velocity: %s, stamina: %f, movement mode: %s"),
-			SlideSpeed, *SlideVelocity.ToString(), StaminaComponent->GetCurrentStamina(),
-			*UEnum::GetValueAsString(GetCharacterMovement()->MovementMode));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Cannot slide: Insufficient stamina, already sliding, not sprinting, jumping, not on ground, or cooldown active"));
-	}
+	FVector CurrentVelocity = GetVelocity();
+	SlideDirection = CurrentVelocity.Size2D() > 0.0f ? CurrentVelocity.GetSafeNormal2D() : GetActorForwardVector();
+	FVector SlideVel = SlideDirection * SlideSpeed;
+	SlideVel.Z = CurrentVelocity.Z;
+	GetCharacterMovement()->Velocity = SlideVel;
 }
 
 void AInputCharacter::EndSlide()
 {
-	if (bIsSliding)
+	if (!bIsSliding) return;
+
+	bIsSliding = false;
+	SlideTimeRemaining = 0.0f;
+	GetCharacterMovement()->GroundFriction = 8.0f;
+	GetCharacterMovement()->BrakingDecelerationWalking = 2048.0f;
+	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+
+	if (bIsCrouching && !bCrouchToggled && !bCrouchKeyHeld)
 	{
-		bIsSliding = false;
-		SlideTimeRemaining = 0.0f;
-		GetCharacterMovement()->GroundFriction = 8.0f;
-		GetCharacterMovement()->BrakingDecelerationWalking = 2048.0f;
-		GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
-		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
-
-		// Auto-uncrouch only if not toggled and hold key is released
-		if (bIsCrouching && !bCrouchToggled && !bCrouchKeyHeld)
-		{
-			EndCrouch();
-		}
-
-		SlideDirection = FVector::ZeroVector;
-
-		UE_LOG(LogTemp, Log, TEXT("Slide ended, speed restored to: %f, stamina: %f, crouched: %s"),
-			GetCharacterMovement()->MaxWalkSpeed, StaminaComponent->GetCurrentStamina(),
-			bIsCrouching ? TEXT("true") : TEXT("false"));
+		EndCrouch();
 	}
 }
 
-
-// Crouch or Slide - Hold Mode
 void AInputCharacter::CrouchOrSlideHoldStart()
 {
 	bCrouchKeyHeld = true;
 	if (bIsSprinting && !bIsSliding && !bIsJumping && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Hold mode: Attempting slide while sprinting"));
 		StartSlide();
 	}
 	else if (!bIsSliding && !bIsCrouching)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Hold mode: Starting crouch"));
 		StartCrouch();
 	}
 }
@@ -373,40 +353,31 @@ void AInputCharacter::CrouchOrSlideHoldEnd()
 	bCrouchKeyHeld = false;
 	if (bIsCrouching && !bCrouchToggled && !bIsSliding)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Hold mode: Ending crouch"));
 		EndCrouch();
 	}
 }
 
-
-// Crouch or Slide - Toggle Mode
 void AInputCharacter::CrouchOrSlideToggle()
 {
 	if (bIsSprinting && !bIsSliding && !bIsJumping && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Toggle mode: Attempting slide while sprinting"));
 		StartSlide();
-		bCrouchToggled = false; // if true: will stay crouched after slide if set to false: will uncrouch after slide
+		bCrouchToggled = false;
 	}
 	else if (!bIsSliding)
 	{
 		if (bIsCrouching)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Toggle mode: Uncrouching"));
 			EndCrouch();
 			bCrouchToggled = false;
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("Toggle mode: Crouching"));
 			StartCrouch();
 			bCrouchToggled = true;
 		}
 	}
 }
-
-
-//Hud Relations
 
 float AInputCharacter::GetStaminaForHUD() const
 {
