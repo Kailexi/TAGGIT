@@ -96,16 +96,16 @@ void AInputCharacter::Tick(float DeltaTime)
 	}
 
 	// Use different interpolation and speed for crouch vs uncrouch
-	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z) // Uncrouching
+	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z)
 	{
 		CrouchEyeOffset = FMath::VInterpConstantTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, UncrouchCameraTransitionSpeed);
 	}
-	else // Crouching or no movement
+	else
 	{
 		CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
 	}
 
-	//LogCurrentSpeed();
+	if (bIsChargingLeap)
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
