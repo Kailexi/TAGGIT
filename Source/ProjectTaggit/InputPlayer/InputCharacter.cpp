@@ -37,6 +37,10 @@ AInputCharacter::AInputCharacter()
 	
 	bCrouchToggled = false;
 	bCrouchKeyHeld = false;
+	bIsMantling = false;
+	MantleTimeRemaining = 0.0f;
+	MantleCooldownRemaining = 0.0f;
+	MantleTargetLocation = FVector::ZeroVector;
 }
 
 void AInputCharacter::BeginPlay()
@@ -107,6 +111,40 @@ void AInputCharacter::Tick(float DeltaTime)
 		LeapChargeTime += DeltaTime;
 		LeapChargeTime = FMath::Min(LeapChargeTime, LeapMaxChargeTime);
 	}
+
+	if (bIsMantling)
+	{
+		MantleTimeRemaining -= DeltaTime;
+
+		float Alpha = FMath::Clamp(1.0f - (MantleTimeRemaining / MantleDuration), 0.0f, 1.0f);
+		FVector CurrentLocation = GetActorLocation();
+		FVector NewLocation = FMath::Lerp(CurrentLocation, MantleTargetLocation, Alpha);
+
+		// Simple vertical boost at the end to clear the ledge
+		if (Alpha > 0.8f)
+		{
+			NewLocation.Z += 50.0f; // no stuckies for you mister tickler
+		}
+
+		SetActorLocation(NewLocation);
+
+		GetCharacterMovement()->SetMovementMode(MOVE_None);
+
+		if (MantleTimeRemaining <= 0.0f)
+		{
+			bIsMantling = false;
+			GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+			MantleCooldownRemaining = MantleCooldown;
+
+			FVector Forward = GetActorForwardVector();
+			LaunchCharacter(Forward * 200.0f, false, true);
+		}
+	}
+
+	if (MantleCooldownRemaining > 0.0f)
+	{
+		MantleCooldownRemaining -= DeltaTime;
+	}
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -133,6 +171,9 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		//Jump/Leap
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::StartJumpCharge);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AInputCharacter::ReleaseJump);
+
+		//Mantle
+		EnhancedInputComponent->BindAction(MantleAction, ETriggerEvent::Started, this, &AInputCharacter::TryMantle);
 	}
 }
 
@@ -374,6 +415,78 @@ void AInputCharacter::CrouchOrSlideToggle()
 			bCrouchToggled = true;
 		}
 	}
+}
+
+
+void AInputCharacter::TryMantle()
+{
+	if (bIsMantling || bIsSliding || bIsJumping || MantleCooldownRemaining > 0.0f)
+	{
+		return;
+	}
+
+	if (!StaminaComponent->CanPerformAction(MantleStaminaCost))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Mantle failed: Insufficient stamina"));
+		return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	FVector CameraLocation = Camera->GetComponentLocation();
+	FRotator CameraRotation = Camera->GetComponentRotation();
+
+	FVector TraceStart = CameraLocation;
+	FVector TraceEnd = TraceStart + CameraRotation.Vector() * MantleReachDistance;
+
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+
+	if (!bHit) return;
+
+	//Ledge or nah?
+	FVector LedgeCheckStart = Hit.ImpactPoint + FVector(0, 0, MantleMinHeight);
+	FVector LedgeCheckEnd = LedgeCheckStart + FVector(0, 0, MantleMaxHeight);
+
+	FHitResult LedgeHit;
+	bool bLedgeFound = GetWorld()->LineTraceSingleByChannel(LedgeHit, LedgeCheckStart, LedgeCheckEnd, ECC_Visibility, QueryParams);
+
+	//DO WE HAVE SPACE AGAINST THE WALL?
+	if (bLedgeFound) return;
+
+	//FIND THE FLOOR POINT
+	FVector TopPoint = Hit.ImpactPoint + FVector(0, 0, MantleMaxHeight);
+	FVector DownEnd = TopPoint - FVector(0, 0, MantleMaxHeight + 50.0f);
+
+	FHitResult DownHit;
+	bool bDownHit = GetWorld()->LineTraceSingleByChannel(DownHit, TopPoint, DownEnd, ECC_Visibility, QueryParams);
+
+	if (!bDownHit) return;
+
+	float HeightDifference = DownHit.ImpactPoint.Z - GetActorLocation().Z;
+	if (HeightDifference < MantleMinHeight || HeightDifference > MantleMaxHeight)
+	{
+		return;
+	}
+
+	// Valid mantle target found holyyyyyyyyyyyyyyy!
+	StaminaComponent->TryConsumeStamina(MantleStaminaCost);
+
+	MantleTargetLocation = DownHit.ImpactPoint;
+	MantleTargetLocation += DownHit.ImpactNormal * 50.0f; // pull
+	MantleTargetLocation.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 10.0f; // place feet on ledge
+
+	bIsMantling = true;
+	MantleTimeRemaining = MantleDuration;
+
+
+	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+
+	UE_LOG(LogTemp, Log, TEXT("Mantling to %s (height diff: %f)"), *MantleTargetLocation.ToString(), HeightDifference);
 }
 
 float AInputCharacter::GetStaminaForHUD() const

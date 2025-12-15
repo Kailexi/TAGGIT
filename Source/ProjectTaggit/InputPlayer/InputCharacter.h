@@ -107,11 +107,32 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Movement|Leap")
 	float LeapForwardBoost = 800.0f;
 
-	
-	
 	float LeapChargeTime = 0.0f;
 
 
+	//Mantle Settings
+	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
+	float MantleReachDistance = 200.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
+	float MantleMaxHeight = 150.0f;                  
+
+	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
+	float MantleMinHeight = 50.0f;                   
+
+	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
+	float MantleDuration = 0.6f;                     
+
+	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
+	float MantleCooldown = 0.5f;                     
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void TryMantle();
+
+	float MantleTimeRemaining = 0.0f;
+	float MantleCooldownRemaining = 0.0f;
+	FVector MantleTargetLocation;
+
+	
 	// Crouching parameters
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "CameraSettings")
 	FVector CrouchEyeOffset;
@@ -135,6 +156,7 @@ protected:
 	bool bCrouchToggled = false;
 	bool bCrouchKeyHeld = false;
 	bool bIsChargingLeap = false;
+	bool bIsMantling = false;
 
 	// Stamina relations
 	UPROPERTY(EditAnywhere, Category = "Stamina")
@@ -147,6 +169,10 @@ protected:
 	float SlideStaminaCost = 150.0f;
 	UPROPERTY(EditAnywhere, Category = "Stamina")
 	float LeapExtraStaminaCost = 200.0f;
+	UPROPERTY(EditAnywhere, Category = "Stamina")
+	float MantleStaminaCost = 50.0f;
+
+
 
 	//Hud Accessors
 
