@@ -54,13 +54,21 @@ AInputCharacter::AInputCharacter()
 	MantleTargetLocation = FVector::ZeroVector;
 
 	//Tag Dash state
-	bAnimIsDashing = bIsDashing;
-	bAnimIsStunned = bIsStunned;
+	bIsDashing = false;
+	bIsStunned = false;
+	bIsTagger = false;
+	TagDashTimeRemaining = 0.0f;
+	TagCooldownRemaining = 0.0f;
+	StunTimeRemaining = 0.0f;
+	TagDashDirection = FVector::ZeroVector;
+
 }
 
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	bIsTagger = true;
+	UE_LOG(LogTemp, Warning, TEXT("Player started as TAGGER (testing mode)"));
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
@@ -170,9 +178,8 @@ void AInputCharacter::Tick(float DeltaTime)
 
 		TryTag();
 
-		FVector DashVelocity = TagDashDirection * TagDashSpeed;
-		DashVelocity.Z = GetCharacterMovement()->Velocity.Z;
-		GetCharacterMovement()->Velocity = DashVelocity;
+		AddMovementInput(TagDashDirection, 1.0f);
+		GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed;
 
 		if (TagDashTimeRemaining <= 0.0f)
 		{
@@ -184,6 +191,13 @@ void AInputCharacter::Tick(float DeltaTime)
 	if (bIsStunned)
 	{
 		StunTimeRemaining -= DeltaTime;
+		
+		//Debug
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Red,
+				FString::Printf(TEXT("STUNNED: %.2fs remaining"), StunTimeRemaining));
+		}
 
 		if (StunTimeRemaining <= 0.0f)
 		{
@@ -192,10 +206,13 @@ void AInputCharacter::Tick(float DeltaTime)
 		}
 	}
 
+
 	if (TagCooldownRemaining > 0.0f)
 	{
 		TagCooldownRemaining -= DeltaTime;
 	}
+
+
 
 
 }
@@ -235,6 +252,8 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 void AInputCharacter::Move(const FInputActionValue& InputValue)
 {
+	if (bIsStunned) return;
+
 	FVector2D MovementVector = InputValue.Get<FVector2D>();
 	if (!Controller) return;
 
@@ -256,6 +275,7 @@ void AInputCharacter::Move(const FInputActionValue& InputValue)
 
 void AInputCharacter::Look(const FInputActionValue& InputValue)
 {
+	if (bIsStunned) return;
 	FVector2D LookAxisVector = InputValue.Get<FVector2D>();
 
 	if (Controller != nullptr)
@@ -704,6 +724,8 @@ void AInputCharacter::EndDash()
 	TagCooldownRemaining = TagCooldown;
 
 	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+
+	TagDashDirection = FVector::ZeroVector;
 
 	UE_LOG(LogTemp, Log, TEXT("Tag dash ended"));
 }

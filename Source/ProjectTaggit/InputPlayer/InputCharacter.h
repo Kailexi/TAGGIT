@@ -212,7 +212,7 @@ protected:
 	bool bIsStunned = false;
 
 	UPROPERTY(BlueprintReadWrite, Category = "GameState")
-	bool bIsTagger = true;  // True if this player is "it", false if hiding
+	bool bIsTagger = false;  // True if this player is "it", false if hiding
 
 
 
