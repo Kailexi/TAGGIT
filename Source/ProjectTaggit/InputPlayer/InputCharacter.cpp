@@ -117,18 +117,12 @@ void AInputCharacter::Tick(float DeltaTime)
 		MantleTimeRemaining -= DeltaTime;
 
 		float Alpha = FMath::Clamp(1.0f - (MantleTimeRemaining / MantleDuration), 0.0f, 1.0f);
-		FVector CurrentLocation = GetActorLocation();
-		FVector NewLocation = FMath::Lerp(CurrentLocation, MantleTargetLocation, Alpha);
 
-		// Simple vertical boost at the end to clear the ledge
-		if (Alpha > 0.8f)
-		{
-			NewLocation.Z += 50.0f; // no stuckies for you mister tickler
-		}
+		// Smooth curve from Apex code lmao i love stealing
+		float SmoothedAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
 
-		SetActorLocation(NewLocation);
-
-		GetCharacterMovement()->SetMovementMode(MOVE_None);
+		FVector NewLocation = FMath::Lerp(MantleStartLocation, MantleTargetLocation, SmoothedAlpha);
+		SetActorLocation(NewLocation, true); //collision detection use sweep don't change please
 
 		if (MantleTimeRemaining <= 0.0f)
 		{
@@ -137,7 +131,9 @@ void AInputCharacter::Tick(float DeltaTime)
 			MantleCooldownRemaining = MantleCooldown;
 
 			FVector Forward = GetActorForwardVector();
-			LaunchCharacter(Forward * 200.0f, false, true);
+			GetCharacterMovement()->Velocity = Forward * 300.0f;
+
+			UE_LOG(LogTemp, Log, TEXT("Mantle completed"));
 		}
 	}
 
@@ -211,7 +207,12 @@ void AInputCharacter::Look(const FInputActionValue& InputValue)
 
 void AInputCharacter::StartJumpCharge()
 {
-	if (bIsChargingLeap || bIsJumping || bIsSliding || !CanJump()) return;
+	if (bIsJumping || bIsSliding || bIsMantling || !CanJump()) return;
+
+	if (bIsChargingLeap)
+	{
+		LeapChargeTime = 0.0f;
+	}
 
 	if (bIsCrouching) EndCrouch();
 
@@ -285,7 +286,7 @@ void AInputCharacter::Landed(const FHitResult& Hit)
 
 void AInputCharacter::StartSprint()
 {
-	if (!bIsSprinting && !bIsCrouching && !bIsSliding)
+	if (!bIsSprinting && !bIsCrouching && !bIsSliding && !bIsMantling)
 	{
 		bIsSprinting = true;
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
@@ -305,7 +306,7 @@ void AInputCharacter::EndSprint()
 //Crouch
 void AInputCharacter::StartCrouch()
 {
-	if (StaminaComponent->GetCurrentStamina() >= CrouchStaminaCost && !bIsCrouching)
+	if (StaminaComponent->CanPerformAction(CrouchStaminaCost) && !bIsCrouching && !bIsMantling)
 	{
 		StaminaComponent->TryConsumeStamina(CrouchStaminaCost);
 		bIsSprinting = false;
@@ -345,7 +346,7 @@ void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
 
 void AInputCharacter::StartSlide()
 {
-	if (!StaminaComponent->CanPerformAction(SlideStaminaCost) || bIsSliding || bIsJumping || !bIsSprinting || !GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f)
+	if (!StaminaComponent->CanPerformAction(SlideStaminaCost) || bIsSliding || bIsJumping || bIsMantling || !bIsSprinting || !GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f)
 		return;
 
 	if (!bIsCrouching) StartCrouch();
@@ -429,7 +430,7 @@ void AInputCharacter::CrouchOrSlideToggle()
 
 void AInputCharacter::TryMantle()
 {
-	if (bIsMantling || bIsSliding || bIsJumping || MantleCooldownRemaining > 0.0f)
+	if (bIsMantling || bIsSliding || MantleCooldownRemaining > 0.0f)
 	{
 		return;
 	}
@@ -440,63 +441,78 @@ void AInputCharacter::TryMantle()
 		return;
 	}
 
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (!PC) return;
+	//Tracing
+	FVector CharacterLocation = GetActorLocation();
+	FVector ForwardVector = GetActorForwardVector();
+	FVector TraceStart = CharacterLocation + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.5f);
+	FVector TraceEnd = TraceStart + (ForwardVector * MantleReachDistance);
 
-	FVector CameraLocation = Camera->GetComponentLocation();
-	FRotator CameraRotation = Camera->GetComponentRotation();
-
-	FVector TraceStart = CameraLocation;
-	FVector TraceEnd = TraceStart + CameraRotation.Vector() * MantleReachDistance;
-
-	FHitResult Hit;
+	FHitResult WallHit;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	//WALL EXIST?
+	bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
 
-	if (!bHit) return;
-
-	//Ledge or nah?
-	FVector LedgeCheckStart = Hit.ImpactPoint + FVector(0, 0, MantleMinHeight);
-	FVector LedgeCheckEnd = LedgeCheckStart + FVector(0, 0, MantleMaxHeight);
-
-	FHitResult LedgeHit;
-	bool bLedgeFound = GetWorld()->LineTraceSingleByChannel(LedgeHit, LedgeCheckStart, LedgeCheckEnd, ECC_Visibility, QueryParams);
-
-	//DO WE HAVE SPACE AGAINST THE WALL?
-	if (bLedgeFound) return;
-
-	//FIND THE FLOOR POINT
-	FVector TopPoint = Hit.ImpactPoint + FVector(0, 0, MantleMaxHeight);
-	FVector DownEnd = TopPoint - FVector(0, 0, MantleMaxHeight + 50.0f);
-
-	FHitResult DownHit;
-	bool bDownHit = GetWorld()->LineTraceSingleByChannel(DownHit, TopPoint, DownEnd, ECC_Visibility, QueryParams);
-
-	if (!bDownHit) return;
-
-	float HeightDifference = DownHit.ImpactPoint.Z - GetActorLocation().Z;
-	if (HeightDifference < MantleMinHeight || HeightDifference > MantleMaxHeight)
+	if (!bHitWall)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Mantle failed: No wall detected"));
 		return;
 	}
 
-	// Valid mantle target found holyyyyyyyyyyyyyyy!
+	//DO WE HAVE A LEDGE?
+	FVector UpTraceStart = WallHit.ImpactPoint;
+	FVector UpTraceEnd = UpTraceStart + FVector(0, 0, MantleMaxHeight);
+
+	FHitResult CeilingHit;
+	bool bHitCeiling = GetWorld()->LineTraceSingleByChannel(CeilingHit, UpTraceStart, UpTraceEnd, ECC_Visibility, QueryParams);
+
+	//SURFACE WHERE?
+	FVector DownTraceStart = WallHit.ImpactPoint + FVector(0, 0, MantleMaxHeight) + (ForwardVector * 30.0f);
+	FVector DownTraceEnd = DownTraceStart - FVector(0, 0, MantleMaxHeight + 100.0f);
+
+	FHitResult LedgeHit;
+	bool bFoundLedge = GetWorld()->LineTraceSingleByChannel(LedgeHit, DownTraceStart, DownTraceEnd, ECC_Visibility, QueryParams);
+
+	if (!bFoundLedge)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Mantle failed: No ledge surface found"));
+		return;
+	}
+
+	float HeightDifference = LedgeHit.ImpactPoint.Z - CharacterLocation.Z;
+
+	
+	if (HeightDifference < MantleMinHeight || HeightDifference > MantleMaxHeight)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Mantle failed: Height difference %f out of range (%f - %f)"),
+			HeightDifference, MantleMinHeight, MantleMaxHeight);
+		return;
+	}
+
+	if (bHitCeiling && (CeilingHit.ImpactPoint.Z - CharacterLocation.Z) < HeightDifference)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Mantle failed: Ceiling obstruction"));
+		return;
+	}
+
+	// Valid mantle found!
 	StaminaComponent->TryConsumeStamina(MantleStaminaCost);
 
-	MantleTargetLocation = DownHit.ImpactPoint;
-	MantleTargetLocation += DownHit.ImpactNormal * 50.0f; // pull
-	MantleTargetLocation.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 10.0f; // place feet on ledge
+	MantleStartLocation = CharacterLocation;
+	MantleTargetLocation = LedgeHit.ImpactPoint;
+	MantleTargetLocation += ForwardVector * 30.0f;
+	MantleTargetLocation.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight(); // Account for capsule height
 
 	bIsMantling = true;
 	MantleTimeRemaining = MantleDuration;
 
-
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 
-	UE_LOG(LogTemp, Log, TEXT("Mantling to %s (height diff: %f)"), *MantleTargetLocation.ToString(), HeightDifference);
+	UE_LOG(LogTemp, Log, TEXT("Mantle started! Height: %f, Target: %s"), HeightDifference, *MantleTargetLocation.ToString());
 }
+
 
 float AInputCharacter::GetStaminaForHUD() const
 {

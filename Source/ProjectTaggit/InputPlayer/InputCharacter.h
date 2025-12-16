@@ -133,6 +133,7 @@ protected:
 	float MantleTimeRemaining = 0.0f;
 	float MantleCooldownRemaining = 0.0f;
 	FVector MantleTargetLocation;
+	FVector MantleStartLocation;
 
 
 	// Crouching parameters
