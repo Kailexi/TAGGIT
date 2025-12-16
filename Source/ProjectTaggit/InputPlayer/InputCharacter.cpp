@@ -56,11 +56,11 @@ AInputCharacter::AInputCharacter()
 	//Tag Dash state
 	bIsDashing = false;
 	bIsStunned = false;
-	bIsTagger = false;
 	TagDashTimeRemaining = 0.0f;
 	TagCooldownRemaining = 0.0f;
 	StunTimeRemaining = 0.0f;
 	TagDashDirection = FVector::ZeroVector;
+	MantleStartLocation = FVector::ZeroVector;
 
 }
 
@@ -93,6 +93,68 @@ void AInputCharacter::Tick(float DeltaTime)
 	bAnimIsCrouching = bIsCrouching;
 	bAnimIsSliding = bIsSliding;
 	bAnimIsChargingLeap = bIsChargingLeap;
+	bAnimIsDashing = bIsDashing;
+	bAnimIsStunned = bIsStunned;
+
+	//STUN HANDLING
+	if (bIsStunned)
+	{
+		StunTimeRemaining -= DeltaTime;
+
+		// Freeze all movement
+		GetCharacterMovement()->MaxWalkSpeed = 0.0f;
+		GetCharacterMovement()->MaxWalkSpeedCrouched = 0.0f;
+		GetCharacterMovement()->Velocity = FVector::ZeroVector;
+
+		// Debug display
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Red,
+				FString::Printf(TEXT("STUNNED: %.2fs"), StunTimeRemaining));
+		}
+
+		if (StunTimeRemaining <= 0.0f)
+		{
+			bIsStunned = false;
+			UE_LOG(LogTemp, Log, TEXT("Stun ended - restoring movement"));
+
+			if (bIsSprinting)
+				GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+			else if (bIsCrouching)
+				GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+			else
+				GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+			GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+		}
+
+		return;
+	}
+
+	//TAG DASH HANDLING
+	if (bIsDashing)
+	{
+		TagDashTimeRemaining -= DeltaTime;
+
+		TryTag();
+
+		GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed;
+		AddMovementInput(TagDashDirection, 1.0f);
+
+		if (TagDashTimeRemaining <= 0.0f)
+		{
+			EndDash();
+		}
+
+		if (TagCooldownRemaining > 0.0f) TagCooldownRemaining -= DeltaTime;
+		if (MantleCooldownRemaining > 0.0f) MantleCooldownRemaining -= DeltaTime;
+		return;
+	}
+
+	if (TagCooldownRemaining > 0.0f)
+	{
+		TagCooldownRemaining -= DeltaTime;
+	}
 
 	//Slide handling
 	if (bIsSliding)
@@ -170,51 +232,6 @@ void AInputCharacter::Tick(float DeltaTime)
 	{
 		MantleCooldownRemaining -= DeltaTime;
 	}
-
-	// Tag Dash handling
-	if (bIsDashing)
-	{
-		TagDashTimeRemaining -= DeltaTime;
-
-		TryTag();
-
-		AddMovementInput(TagDashDirection, 1.0f);
-		GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed;
-
-		if (TagDashTimeRemaining <= 0.0f)
-		{
-			EndDash();
-		}
-	}
-
-	// Stun handling
-	if (bIsStunned)
-	{
-		StunTimeRemaining -= DeltaTime;
-		
-		//Debug
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Red,
-				FString::Printf(TEXT("STUNNED: %.2fs remaining"), StunTimeRemaining));
-		}
-
-		if (StunTimeRemaining <= 0.0f)
-		{
-			bIsStunned = false;
-			UE_LOG(LogTemp, Log, TEXT("Stun ended"));
-		}
-	}
-
-
-	if (TagCooldownRemaining > 0.0f)
-	{
-		TagCooldownRemaining -= DeltaTime;
-	}
-
-
-
-
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -252,7 +269,7 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 void AInputCharacter::Move(const FInputActionValue& InputValue)
 {
-	if (bIsStunned) return;
+	if (bIsStunned || bIsDashing) return;
 
 	FVector2D MovementVector = InputValue.Get<FVector2D>();
 	if (!Controller) return;
@@ -466,7 +483,8 @@ void AInputCharacter::EndSlide()
 void AInputCharacter::CrouchOrSlideHoldStart()
 {
 	bCrouchKeyHeld = true;
-	if (bIsSprinting && !bIsSliding && !bIsJumping && bIsStunned && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
+	if (bIsSprinting && !bIsSliding && !bIsJumping && !bIsStunned && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
+
 	{
 		StartSlide();
 	}
