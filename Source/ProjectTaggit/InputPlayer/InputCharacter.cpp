@@ -25,22 +25,37 @@ AInputCharacter::AInputCharacter()
 	CrouchEyeOffset = FVector::ZeroVector;
 	TargetCrouchEyeOffset = FVector::ZeroVector;
 
+
+	//Sprint state
 	bIsSprinting = false;
+	
+	//Jump state
 	bIsJumping = false;
+	
+	//Crouch states
 	bIsCrouching = false;
-	bIsSliding = false;
+	bCrouchToggled = false;
+	bCrouchKeyHeld = false;
+
+	//Leap states
 	bIsChargingLeap = false;
 	LeapChargeTime = 0.0f;
+	
+	//Slide states
+	bIsSliding = false;
 	SlideTimeRemaining = 0.0f;
 	SlideCooldownRemaining = 0.0f;
 	SlideDirection = FVector::ZeroVector;
 
-	bCrouchToggled = false;
-	bCrouchKeyHeld = false;
+	//Mantle states
 	bIsMantling = false;
 	MantleTimeRemaining = 0.0f;
 	MantleCooldownRemaining = 0.0f;
 	MantleTargetLocation = FVector::ZeroVector;
+
+	//Tag Dash state
+	bAnimIsDashing = bIsDashing;
+	bAnimIsStunned = bIsStunned;
 }
 
 void AInputCharacter::BeginPlay()
@@ -60,6 +75,7 @@ void AInputCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Animation variables update
 	const FVector Velocity = GetVelocity();
 	AnimSpeed = Velocity.Size2D();
 	AnimVerticalVelocity = Velocity.Z;
@@ -70,6 +86,7 @@ void AInputCharacter::Tick(float DeltaTime)
 	bAnimIsSliding = bIsSliding;
 	bAnimIsChargingLeap = bIsChargingLeap;
 
+	//Slide handling
 	if (bIsSliding)
 	{
 		SlideTimeRemaining -= DeltaTime;
@@ -78,6 +95,7 @@ void AInputCharacter::Tick(float DeltaTime)
 		if (SlideTimeRemaining <= 0.0f) EndSlide();
 	}
 
+	//Sprint handling/crouch speed handling/walk speed handling
 	else if (bIsSprinting)
 	{
 		if (AnimSpeed > 0.0f) StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
@@ -100,18 +118,21 @@ void AInputCharacter::Tick(float DeltaTime)
 
 	if (SlideCooldownRemaining > 0.0f) SlideCooldownRemaining -= DeltaTime;
 
+	//Camera crouch offset handling,thanks my friend from Ravensoft and Call of Duty!
 	// Use different interpolation and speed for crouch vs uncrouch
 	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z)
 		CrouchEyeOffset = FMath::VInterpConstantTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, UncrouchCameraTransitionSpeed);
 	else
 		CrouchEyeOffset = FMath::VInterpTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, CrouchCameraTransitionSpeed);
 
+	// Leap charging handling
 	if (bIsChargingLeap)
 	{
 		LeapChargeTime += DeltaTime;
 		LeapChargeTime = FMath::Min(LeapChargeTime, LeapMaxChargeTime);
 	}
 
+	// Mantling handling
 	if (bIsMantling)
 	{
 		MantleTimeRemaining -= DeltaTime;
@@ -141,6 +162,42 @@ void AInputCharacter::Tick(float DeltaTime)
 	{
 		MantleCooldownRemaining -= DeltaTime;
 	}
+
+	// Tag Dash handling
+	if (bIsDashing)
+	{
+		TagDashTimeRemaining -= DeltaTime;
+
+		TryTag();
+
+		FVector DashVelocity = TagDashDirection * TagDashSpeed;
+		DashVelocity.Z = GetCharacterMovement()->Velocity.Z;
+		GetCharacterMovement()->Velocity = DashVelocity;
+
+		if (TagDashTimeRemaining <= 0.0f)
+		{
+			EndDash();
+		}
+	}
+
+	// Stun handling
+	if (bIsStunned)
+	{
+		StunTimeRemaining -= DeltaTime;
+
+		if (StunTimeRemaining <= 0.0f)
+		{
+			bIsStunned = false;
+			UE_LOG(LogTemp, Log, TEXT("Stun ended"));
+		}
+	}
+
+	if (TagCooldownRemaining > 0.0f)
+	{
+		TagCooldownRemaining -= DeltaTime;
+	}
+
+
 }
 
 void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -170,6 +227,9 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 		//Mantle
 		EnhancedInputComponent->BindAction(MantleAction, ETriggerEvent::Started, this, &AInputCharacter::TryMantle);
+
+		//Tag Dash
+		EnhancedInputComponent->BindAction(TagDashAction, ETriggerEvent::Started, this, &AInputCharacter::PerformTagDash);
 	}
 }
 
@@ -207,7 +267,7 @@ void AInputCharacter::Look(const FInputActionValue& InputValue)
 
 void AInputCharacter::StartJumpCharge()
 {
-	if (bIsJumping || bIsSliding || bIsMantling || !CanJump()) return;
+	if (bIsJumping || bIsSliding || bIsMantling || bIsStunned || !CanJump()) return;
 
 	if (bIsChargingLeap)
 	{
@@ -286,7 +346,7 @@ void AInputCharacter::Landed(const FHitResult& Hit)
 
 void AInputCharacter::StartSprint()
 {
-	if (!bIsSprinting && !bIsCrouching && !bIsSliding && !bIsMantling)
+	if (!bIsSprinting && !bIsCrouching && !bIsSliding && !bIsMantling && !bIsStunned)
 	{
 		bIsSprinting = true;
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
@@ -306,7 +366,7 @@ void AInputCharacter::EndSprint()
 //Crouch
 void AInputCharacter::StartCrouch()
 {
-	if (StaminaComponent->CanPerformAction(CrouchStaminaCost) && !bIsCrouching && !bIsMantling)
+	if (StaminaComponent->CanPerformAction(CrouchStaminaCost) && !bIsCrouching && !bIsMantling && !bIsStunned)
 	{
 		StaminaComponent->TryConsumeStamina(CrouchStaminaCost);
 		bIsSprinting = false;
@@ -346,7 +406,7 @@ void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
 
 void AInputCharacter::StartSlide()
 {
-	if (!StaminaComponent->CanPerformAction(SlideStaminaCost) || bIsSliding || bIsJumping || bIsMantling || !bIsSprinting || !GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f)
+	if (!StaminaComponent->CanPerformAction(SlideStaminaCost) || bIsSliding || bIsJumping || bIsMantling || !bIsSprinting || bIsStunned || !GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f)
 		return;
 
 	if (!bIsCrouching) StartCrouch();
@@ -386,7 +446,7 @@ void AInputCharacter::EndSlide()
 void AInputCharacter::CrouchOrSlideHoldStart()
 {
 	bCrouchKeyHeld = true;
-	if (bIsSprinting && !bIsSliding && !bIsJumping && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
+	if (bIsSprinting && !bIsSliding && !bIsJumping && bIsStunned && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
 	{
 		StartSlide();
 	}
@@ -430,7 +490,7 @@ void AInputCharacter::CrouchOrSlideToggle()
 
 void AInputCharacter::TryMantle()
 {
-	if (bIsMantling || bIsSliding || MantleCooldownRemaining > 0.0f)
+	if (bIsMantling || bIsSliding || bIsStunned || MantleCooldownRemaining > 0.0f)
 	{
 		return;
 	}
@@ -511,6 +571,141 @@ void AInputCharacter::TryMantle()
 	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 
 	UE_LOG(LogTemp, Log, TEXT("Mantle started! Height: %f, Target: %s"), HeightDifference, *MantleTargetLocation.ToString());
+}
+
+void AInputCharacter::PerformTagDash()
+{
+	// Cannot dash if: not tagger, stunned, already dashing, in air, or on cooldown
+	if (!bIsTagger || bIsStunned || bIsDashing || bIsJumping || bIsMantling ||
+		!GetCharacterMovement()->IsMovingOnGround() || TagCooldownRemaining > 0.0f)
+	{
+		if (!bIsTagger)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Cannot tag dash: You are not the tagger!"));
+		}
+		return;
+	}
+
+	if (!StaminaComponent->CanPerformAction(TagDashStaminaCost))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot tag dash: Insufficient stamina"));
+		return;
+	}
+
+	StaminaComponent->TryConsumeStamina(TagDashStaminaCost);
+
+	bIsDashing = true;
+	TagDashTimeRemaining = TagDashDuration;
+
+	FVector InputDirection = GetCharacterMovement()->GetLastInputVector();
+	if (InputDirection.SizeSquared() > 0.01f)
+	{
+		TagDashDirection = InputDirection.GetSafeNormal();
+	}
+	else
+	{
+		TagDashDirection = GetActorForwardVector();
+	}
+
+	if (bIsSprinting) EndSprint();
+	if (bIsCrouching) EndCrouch();
+	if (bIsSliding) EndSlide();
+
+	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s"), *TagDashDirection.ToString());
+}
+
+void AInputCharacter::TryTag()
+{
+	if (!bIsDashing || !bIsTagger) return;
+
+	
+	FVector Start = GetActorLocation();
+	FVector End = Start + (TagDashDirection * TagReachDistance);
+
+	TArray<FHitResult> HitResults;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+	QueryParams.bTraceComplex = false;
+
+
+	bool bHit = GetWorld()->SweepMultiByChannel(
+		HitResults,
+		Start,
+		End,
+		FQuat::Identity,
+		ECC_Pawn,
+		FCollisionShape::MakeSphere(50.0f),  // 50cm radius for tag detection
+		QueryParams
+	);
+
+	if (bHit)
+	{
+		for (const FHitResult& Hit : HitResults)
+		{
+			AInputCharacter* OtherPlayer = Cast<AInputCharacter>(Hit.GetActor());
+
+			if (OtherPlayer && OtherPlayer != this && !OtherPlayer->bIsTagger)
+			{
+				// Successful tag!
+				UE_LOG(LogTemp, Log, TEXT("TAG! Hit player: %s"), *OtherPlayer->GetName());
+
+				OtherPlayer->OnTagged(this);
+				SetTaggerStatus(false);
+				OnBecameHider();
+				EndDash();
+
+				// Apply stun to the NEW tagger (brief grace period)
+				OtherPlayer->bIsStunned = true;
+				OtherPlayer->StunTimeRemaining = TagStunDuration;
+
+				break;  // Only tag one player at a time
+			}
+		}
+	}
+}
+
+void AInputCharacter::OnTagged(AInputCharacter* TaggerPlayer)
+{
+	if (bIsTagger) return;  // Already tagger, ignore
+
+	UE_LOG(LogTemp, Warning, TEXT("You've been tagged by %s! You are now IT!"),
+		TaggerPlayer ? *TaggerPlayer->GetName() : TEXT("Unknown"));
+
+	SetTaggerStatus(true);
+
+	// Visual/audio feedback
+	// For now, just log i am too lazy lmao
+}
+
+void AInputCharacter::SetTaggerStatus(bool bNewTaggerStatus)
+{
+	if (bIsTagger == bNewTaggerStatus) return;
+
+	bIsTagger = bNewTaggerStatus;
+
+	if (bIsTagger)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("You are now the TAGGER! Chase others!"));
+		OnBecameTagger();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("You are now HIDING! Avoid the tagger!"));
+		OnBecameHider();
+	}
+}
+
+void AInputCharacter::EndDash()
+{
+	if (!bIsDashing) return;
+
+	bIsDashing = false;
+	TagDashTimeRemaining = 0.0f;
+	TagCooldownRemaining = TagCooldown;
+
+	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+
+	UE_LOG(LogTemp, Log, TEXT("Tag dash ended"));
 }
 
 

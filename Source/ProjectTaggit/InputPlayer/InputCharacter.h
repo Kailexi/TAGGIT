@@ -41,6 +41,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* MantleAction;
 
+	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
+	class UInputAction* TagDashAction;
+
 public:
 	AInputCharacter();
 
@@ -56,6 +59,15 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	UFUNCTION(BlueprintImplementableEvent, Category = "GameState")
+	void OnBecameTagger();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "GameState")
+	void OnBecameHider();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "GameState")
+	void OnSuccessfulTag(AInputCharacter* TaggedPlayer);
+
 
 protected:
 	void Move(const FInputActionValue& InputValue);
@@ -72,6 +84,21 @@ protected:
 	void StartJumpCharge();
 	void ReleaseJump();
 	void LogCurrentSpeed();
+	void PerformTagDash();
+	void TryTag();
+	void OnTagged(AInputCharacter* TaggerPlayer);
+	void EndDash();
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	void SetTaggerStatus(bool bNewTaggerStatus);
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool IsTagger() const { return bIsTagger; }
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool IsStunned() const { return bIsStunned; }
+
+
 
 	//Movement 
 	UPROPERTY(EditAnywhere, Category = "Movement|Walk")
@@ -135,6 +162,26 @@ protected:
 	FVector MantleTargetLocation;
 	FVector MantleStartLocation;
 
+	//Tagging/TAGDASH
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagDashSpeed = 1500.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagDashDuration = 0.2f;
+
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagReachDistance = 150.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagStunDuration = 0.25f;  // Increased from 0.1s for better balance
+
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagCooldown = 0.5f;  // Prevent spam
+
+	float TagDashTimeRemaining = 0.0f;
+	float TagCooldownRemaining = 0.0f;
+	float StunTimeRemaining = 0.0f;
+	FVector TagDashDirection;
 
 	// Crouching parameters
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "CameraSettings")
@@ -161,6 +208,14 @@ protected:
 	bool bIsChargingLeap = false;
 	bool bIsMantling = false;
 
+	bool bIsDashing = false;
+	bool bIsStunned = false;
+
+	UPROPERTY(BlueprintReadWrite, Category = "GameState")
+	bool bIsTagger = true;  // True if this player is "it", false if hiding
+
+
+
 	// Stamina relations
 	UPROPERTY(EditAnywhere, Category = "Stamina")
 	float SprintCostPerSecond = 100.0f;
@@ -174,6 +229,8 @@ protected:
 	float LeapExtraStaminaCost = 200.0f;
 	UPROPERTY(EditAnywhere, Category = "Stamina")
 	float MantleStaminaCost = 50.0f;
+	UPROPERTY(EditAnywhere, Category = "Stamina")
+	float TagDashStaminaCost = 100.0f;
 
 
 
@@ -201,5 +258,11 @@ protected:
 	float AnimSpeed = 0.0f;
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	float AnimVerticalVelocity = 0.0f;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsDashing = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bAnimIsStunned = false;
+
+
 
 };
