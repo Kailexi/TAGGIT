@@ -69,8 +69,7 @@ AInputCharacter::AInputCharacter()
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	bIsTagger = true;
-	UE_LOG(LogTemp, Warning, TEXT("Player started as TAGGER (testing mode)"));
+
 	TagCooldownRemaining = 0.5f;
 
 	// Force-initialize tag dash values if they're invalid
