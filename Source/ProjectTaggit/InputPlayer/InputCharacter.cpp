@@ -69,6 +69,22 @@ void AInputCharacter::BeginPlay()
 	Super::BeginPlay();
 	bIsTagger = true;
 	UE_LOG(LogTemp, Warning, TEXT("Player started as TAGGER (testing mode)"));
+	TagCooldownRemaining = 0.5f;
+
+	// Force-initialize tag dash values if they're invalid
+	if (TagDashDuration <= 0.0f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("TagDashDuration was %.3f! Forcing to 0.2"), TagDashDuration);
+		TagDashDuration = 0.2f;
+	}
+	if (TagDashSpeed <= 0.0f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("TagDashSpeed was %.3f! Forcing to 1500"), TagDashSpeed);
+		TagDashSpeed = 1500.0f;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Tag Dash Config: Duration=%.3f, Speed=%.0f, Reach=%.0f"),
+		TagDashDuration, TagDashSpeed, TagReachDistance);
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
@@ -169,28 +185,36 @@ void AInputCharacter::Tick(float DeltaTime)
 	}
 
 	//Sprint handling/crouch speed handling/walk speed handling
-	else if (bIsSprinting)
+	if (TagCooldownRemaining <= 0.0f)
 	{
-		if (AnimSpeed > 0.0f) StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
+		if (bIsSprinting)
+		{
+			if (AnimSpeed > 0.0f) StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
 
-		if (StaminaComponent->GetCurrentStamina() <= 0.0f) EndSprint();
+			if (StaminaComponent->GetCurrentStamina() <= 0.0f) EndSprint();
 
-		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
-		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
-	}
-	else if (bIsCrouching)
-	{
-		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
-		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+			GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+			GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+		}
+		else if (bIsCrouching)
+		{
+			GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+			GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+		}
+		else
+		{
+			GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+			GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+		}
 	}
 	else
 	{
-		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+		if (bIsSprinting && AnimSpeed > 0.0f)
+		{
+			StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
+			if (StaminaComponent->GetCurrentStamina() <= 0.0f) EndSprint();
+		}
 	}
-
-	if (SlideCooldownRemaining > 0.0f) SlideCooldownRemaining -= DeltaTime;
-
 	//Camera crouch offset handling,thanks my friend from Ravensoft and Call of Duty!
 	// Use different interpolation and speed for crouch vs uncrouch
 	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z)
@@ -637,6 +661,9 @@ void AInputCharacter::PerformTagDash()
 
 	bIsDashing = true;
 	TagDashTimeRemaining = TagDashDuration;
+	UE_LOG(LogTemp, Error, TEXT("DASH SETUP: TagDashDuration=%.3f, TagDashTimeRemaining=%.3f"),
+		TagDashDuration, TagDashTimeRemaining);
+
 
 	FVector InputDirection = GetCharacterMovement()->GetLastInputVector();
 	if (InputDirection.SizeSquared() > 0.01f)
@@ -649,12 +676,18 @@ void AInputCharacter::PerformTagDash()
 	}
 
 	if (bIsSprinting) EndSprint();
-	if (bIsCrouching) EndCrouch();
-	if (bIsSliding) EndSlide();
+	if (bIsCrouching || bIsSliding)
+	{
+		if (bIsSliding) EndSlide();
 
-	TargetCrouchEyeOffset = FVector::ZeroVector;
-	CrouchEyeOffset = FVector::ZeroVector;
-
+		UnCrouch();
+		bIsCrouching = false;
+		bCrouchToggled = false;
+		TargetCrouchEyeOffset = FVector::ZeroVector;
+		CrouchEyeOffset = FVector::ZeroVector;
+		UE_LOG(LogTemp, Warning, TEXT("Forcing uncrouch for dash"));
+	}
+	UE_LOG(LogTemp, Error, TEXT("DASH SETUP: TagDashDuration=%.3f, TagDashTimeRemaining=%.3f"), TagDashDuration, TagDashTimeRemaining);
 	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s"), *TagDashDirection.ToString());
 }
 
@@ -743,30 +776,35 @@ void AInputCharacter::EndDash()
 {
 	if (!bIsDashing) return;
 
-	UE_LOG(LogTemp, Warning, TEXT("EndDash called: TagDashTimeRemaining=%.3f"), TagDashTimeRemaining);
+	UE_LOG(LogTemp, Warning, TEXT("EndDash called: TagDashTimeRemaining=%.3f, bIsCrouching=%d"), TagDashTimeRemaining, bIsCrouching);
 
 	bIsDashing = false;
 	TagDashTimeRemaining = 0.0f;
 	TagCooldownRemaining = TagCooldown;
 
+	// Ensure not in crouch state
+	if (bIsCrouching)
+	{
+		UnCrouch();
+		bIsCrouching = false;
+		bCrouchToggled = false;
+		UE_LOG(LogTemp, Warning, TEXT("EndDash: Force uncrouching!"));
+	}
+
 	if (bIsSprinting)
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
-	else if (bIsCrouching)
-		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
 	else
 		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 
+	TargetCrouchEyeOffset = FVector::ZeroVector;
+	CrouchEyeOffset = FVector::ZeroVector;
+
 	TagDashDirection = FVector::ZeroVector;
 
-	// Ensure camera is at correct height
-	if (!bIsCrouching)
-	{
-		TargetCrouchEyeOffset = FVector::ZeroVector;
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("Tag dash ended - Speed restored to %.0f, bIsCrouching=%d"),
+	UE_LOG(LogTemp, Log, TEXT("Tag dash ended - Speed: %.0f, bIsCrouching: %d"),
 		GetCharacterMovement()->MaxWalkSpeed, bIsCrouching);
 }
+
 
 
 
