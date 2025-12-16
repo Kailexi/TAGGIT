@@ -136,6 +136,8 @@ void AInputCharacter::Tick(float DeltaTime)
 	{
 		TagDashTimeRemaining -= DeltaTime;
 
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Dashing: TimeRemaining=%.3f, DeltaTime=%.3f"), TagDashTimeRemaining, DeltaTime);
+
 		TryTag();
 
 		GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed;
@@ -143,6 +145,7 @@ void AInputCharacter::Tick(float DeltaTime)
 
 		if (TagDashTimeRemaining <= 0.0f)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("Dash ending: TimeRemaining=%.3f"), TagDashTimeRemaining);
 			EndDash();
 		}
 
@@ -649,6 +652,9 @@ void AInputCharacter::PerformTagDash()
 	if (bIsCrouching) EndCrouch();
 	if (bIsSliding) EndSlide();
 
+	TargetCrouchEyeOffset = FVector::ZeroVector;
+	CrouchEyeOffset = FVector::ZeroVector;
+
 	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s"), *TagDashDirection.ToString());
 }
 
@@ -737,16 +743,31 @@ void AInputCharacter::EndDash()
 {
 	if (!bIsDashing) return;
 
+	UE_LOG(LogTemp, Warning, TEXT("EndDash called: TagDashTimeRemaining=%.3f"), TagDashTimeRemaining);
+
 	bIsDashing = false;
 	TagDashTimeRemaining = 0.0f;
 	TagCooldownRemaining = TagCooldown;
 
-	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	if (bIsSprinting)
+		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+	else if (bIsCrouching)
+		GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
+	else
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 
 	TagDashDirection = FVector::ZeroVector;
 
-	UE_LOG(LogTemp, Log, TEXT("Tag dash ended"));
+	// Ensure camera is at correct height
+	if (!bIsCrouching)
+	{
+		TargetCrouchEyeOffset = FVector::ZeroVector;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Tag dash ended - Speed restored to %.0f, bIsCrouching=%d"),
+		GetCharacterMovement()->MaxWalkSpeed, bIsCrouching);
 }
+
 
 
 float AInputCharacter::GetStaminaForHUD() const
