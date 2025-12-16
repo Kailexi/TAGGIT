@@ -9,32 +9,32 @@ UCLASS()
 class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 {
 	GENERATED_BODY()
-	
+
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* Camera;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaminaComponent* StaminaComponent;
 
 protected:
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputMappingContext* InputMapping;
-	
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* MoveAction;
-	
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* JumpAction;
-	
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* LookAction;
-	
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* SprintAction;
-	
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* CrouchOrSlideAction;
-	
+
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputAction* ToggleCrouchOrSlideAction;
 
@@ -43,7 +43,7 @@ protected:
 
 public:
 	AInputCharacter();
-	
+
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult) override;
@@ -52,9 +52,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Landed(const FHitResult& Hit) override;
 
-public:	
+public:
 	virtual void Tick(float DeltaTime) override;
-	
+
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 protected:
@@ -79,20 +79,20 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Movement|Sprint")
 	float SprintSpeed = 1000.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Crouch")
-	
+
 	//Crouch
 	float CrouchSpeed = 300.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Crouch")
 	float CrouchHeight = 60.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Slide")
-	
+
 	//Slide
 	float SlideSpeed = 1200.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Slide")
 	float SlideDuration = 1.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Slide")
 	float SlideCooldown = 0.5f;
-	
+
 	float SlideTimeRemaining;
 	float SlideCooldownRemaining;
 	FVector SlideDirection;
@@ -103,9 +103,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Movement|Leap")
 	float LeapMaxChargeTime = 1.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Leap")
-	float LeapHeightMultiplier = 4.0f;
+	float LeapHeightMultiplier = 6.0f;
 	UPROPERTY(EditAnywhere, Category = "Movement|Leap")
-	float LeapForwardBoost = 800.0f;
+	float LeapForwardBoost = 400.0f;
+	UPROPERTY(EditAnywhere, Category = "Movement|Leap")
+	float QuickJumpThreshold = 0.08f;
 
 	float LeapChargeTime = 0.0f;
 
@@ -115,16 +117,16 @@ protected:
 	float MantleReachDistance = 200.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
-	float MantleMaxHeight = 150.0f;                  
+	float MantleMaxHeight = 150.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
-	float MantleMinHeight = 50.0f;                   
+	float MantleMinHeight = 50.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
-	float MantleDuration = 0.6f;                     
+	float MantleDuration = 0.6f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|Mantle")
-	float MantleCooldown = 0.5f;                     
+	float MantleCooldown = 0.5f;
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void TryMantle();
 
@@ -132,7 +134,7 @@ protected:
 	float MantleCooldownRemaining = 0.0f;
 	FVector MantleTargetLocation;
 
-	
+
 	// Crouching parameters
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "CameraSettings")
 	FVector CrouchEyeOffset;
@@ -152,7 +154,7 @@ protected:
 	bool bIsCrouching = false;
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSliding = false;
-	
+
 	bool bCrouchToggled = false;
 	bool bCrouchKeyHeld = false;
 	bool bIsChargingLeap = false;
@@ -180,6 +182,8 @@ protected:
 	float GetStaminaForHUD() const;
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	float GetMaxStaminaForHUD() const;
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	float GetLeapChargePercentage() const;
 
 	// Animation variables
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")

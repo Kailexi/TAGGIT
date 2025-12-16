@@ -34,7 +34,7 @@ AInputCharacter::AInputCharacter()
 	SlideTimeRemaining = 0.0f;
 	SlideCooldownRemaining = 0.0f;
 	SlideDirection = FVector::ZeroVector;
-	
+
 	bCrouchToggled = false;
 	bCrouchKeyHeld = false;
 	bIsMantling = false;
@@ -77,13 +77,13 @@ void AInputCharacter::Tick(float DeltaTime)
 		GetCharacterMovement()->MaxWalkSpeedCrouched = SlideSpeed;
 		if (SlideTimeRemaining <= 0.0f) EndSlide();
 	}
-	
+
 	else if (bIsSprinting)
 	{
 		if (AnimSpeed > 0.0f) StaminaComponent->TryConsumeStamina(SprintCostPerSecond * DeltaTime);
-		
+
 		if (StaminaComponent->GetCurrentStamina() <= 0.0f) EndSprint();
-		
+
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 		GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 	}
@@ -99,7 +99,7 @@ void AInputCharacter::Tick(float DeltaTime)
 	}
 
 	if (SlideCooldownRemaining > 0.0f) SlideCooldownRemaining -= DeltaTime;
-	
+
 	// Use different interpolation and speed for crouch vs uncrouch
 	if (TargetCrouchEyeOffset.Z > CrouchEyeOffset.Z)
 		CrouchEyeOffset = FMath::VInterpConstantTo(CrouchEyeOffset, TargetCrouchEyeOffset, DeltaTime, UncrouchCameraTransitionSpeed);
@@ -155,19 +155,19 @@ void AInputCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	{
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AInputCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AInputCharacter::Look);
-		
+
 		//Sprint
 
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AInputCharacter::StartSprint);
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AInputCharacter::EndSprint);
-		
+
 		//Hold crouch/slide
 		EnhancedInputComponent->BindAction(CrouchOrSlideAction, ETriggerEvent::Started, this, &AInputCharacter::CrouchOrSlideHoldStart);
 		EnhancedInputComponent->BindAction(CrouchOrSlideAction, ETriggerEvent::Completed, this, &AInputCharacter::CrouchOrSlideHoldEnd);
-		
+
 		//Toggle crouch/slide
 		EnhancedInputComponent->BindAction(ToggleCrouchOrSlideAction, ETriggerEvent::Started, this, &AInputCharacter::CrouchOrSlideToggle);
-		
+
 		//Jump/Leap
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AInputCharacter::StartJumpCharge);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AInputCharacter::ReleaseJump);
@@ -221,8 +221,15 @@ void AInputCharacter::StartJumpCharge()
 
 void AInputCharacter::ReleaseJump()
 {
-	if (!bIsChargingLeap)
+	// If not charging, or charge time is below quick jump threshold, perform regular jump
+	if (!bIsChargingLeap || LeapChargeTime < QuickJumpThreshold)
 	{
+		if (bIsChargingLeap)
+		{
+			bIsChargingLeap = false;
+			LeapChargeTime = 0.0f;
+		}
+
 		if (CanJump() && StaminaComponent->CanPerformAction(JumpStaminaCost))
 		{
 			StaminaComponent->TryConsumeStamina(JumpStaminaCost);
@@ -245,6 +252,7 @@ void AInputCharacter::ReleaseJump()
 	if (!StaminaComponent->CanPerformAction(TotalStamina))
 	{
 		bIsJumping = false;
+		LeapChargeTime = 0.0f;
 		return;
 	}
 
@@ -266,6 +274,7 @@ void AInputCharacter::ReleaseJump()
 	}
 
 	MoveComp->JumpZVelocity = OriginalJumpZ;
+	LeapChargeTime = 0.0f;
 }
 
 void AInputCharacter::Landed(const FHitResult& Hit)
@@ -497,4 +506,10 @@ float AInputCharacter::GetStaminaForHUD() const
 float AInputCharacter::GetMaxStaminaForHUD() const
 {
 	return StaminaComponent ? StaminaComponent->GetMaxStamina() : 1000.0f;
+}
+
+float AInputCharacter::GetLeapChargePercentage() const
+{
+	if (!bIsChargingLeap) return 0.0f;
+	return FMath::Clamp(LeapChargeTime / LeapMaxChargeTime, 0.0f, 1.0f);
 }
