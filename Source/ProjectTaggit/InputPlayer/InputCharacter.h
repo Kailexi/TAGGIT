@@ -87,7 +87,7 @@ protected:
 	void PerformTagDash();
 	void TryTag();
 	void OnTagged(AInputCharacter* TaggerPlayer);
-	void EndDash();
+	void EndDash(bool bTagSuccessful = false);
 
 	UFUNCTION(BlueprintCallable, Category = "GameState")
 	void SetTaggerStatus(bool bNewTaggerStatus);
@@ -97,6 +97,9 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "GameState")
 	bool IsStunned() const { return bIsStunned; }
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool DidTagFail() const { return bTagFailedThisDash; }
 
 
 
@@ -164,23 +167,27 @@ protected:
 
 	//Tagging/TAGDASH
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagDashSpeed = 1500.0f;
+	float TagDashSpeed = 2000.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagDashDuration = 0.2f;
+	float TagDashDuration = 0.75f;  // Longer dash duration
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
 	float TagReachDistance = 150.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagStunDuration = 0.25f;  // Increased from 0.1s for better balance
+	float TagStunDuration = 0.5f;  // Stun on failed tag
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagCooldown = 0.5f;  // Prevent spam
+	float TagStunGracePeriod = 0.15f;  // Time before stun fully freezes movement (keep dash momentum)
+
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagCooldown = 1.5f;  // Prevent chaining tags
 
 	float TagDashTimeRemaining = 0.0f;
 	float TagCooldownRemaining = 0.0f;
 	float StunTimeRemaining = 0.0f;
+	float StunGracePeriodRemaining = 0.0f;  // Time before stun fully freezes movement
 	FVector TagDashDirection;
 
 	// Crouching parameters
@@ -210,6 +217,7 @@ protected:
 
 	bool bIsDashing = false;
 	bool bIsStunned = false;
+	bool bTagFailedThisDash = false;  // Track if dash ended without tagging anyone
 
 	UPROPERTY(BlueprintReadWrite, Category = "GameState")
 	bool bIsTagger = false;  // True if this player is "it", false if hiding
@@ -262,7 +270,5 @@ protected:
 	bool bAnimIsDashing = false;
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	bool bAnimIsStunned = false;
-
-
 
 };

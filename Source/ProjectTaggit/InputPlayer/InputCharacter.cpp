@@ -28,10 +28,10 @@ AInputCharacter::AInputCharacter()
 
 	//Sprint state
 	bIsSprinting = false;
-	
+
 	//Jump state
 	bIsJumping = false;
-	
+
 	//Crouch states
 	bIsCrouching = false;
 	bCrouchToggled = false;
@@ -40,7 +40,7 @@ AInputCharacter::AInputCharacter()
 	//Leap states
 	bIsChargingLeap = false;
 	LeapChargeTime = 0.0f;
-	
+
 	//Slide states
 	bIsSliding = false;
 	SlideTimeRemaining = 0.0f;
@@ -53,12 +53,14 @@ AInputCharacter::AInputCharacter()
 	MantleCooldownRemaining = 0.0f;
 	MantleTargetLocation = FVector::ZeroVector;
 
-	//Tag Dash state
+	//Tag Dash states
 	bIsDashing = false;
 	bIsStunned = false;
+	bTagFailedThisDash = false;
 	TagDashTimeRemaining = 0.0f;
 	TagCooldownRemaining = 0.0f;
 	StunTimeRemaining = 0.0f;
+	StunGracePeriodRemaining = 0.0f;
 	TagDashDirection = FVector::ZeroVector;
 	MantleStartLocation = FVector::ZeroVector;
 
@@ -74,17 +76,27 @@ void AInputCharacter::BeginPlay()
 	// Force-initialize tag dash values if they're invalid
 	if (TagDashDuration <= 0.0f)
 	{
-		UE_LOG(LogTemp, Error, TEXT("TagDashDuration was %.3f! Forcing to 0.2"), TagDashDuration);
-		TagDashDuration = 0.2f;
+		UE_LOG(LogTemp, Error, TEXT("TagDashDuration was %.3f! Forcing to 0.75"), TagDashDuration);
+		TagDashDuration = 0.75f;
 	}
 	if (TagDashSpeed <= 0.0f)
 	{
-		UE_LOG(LogTemp, Error, TEXT("TagDashSpeed was %.3f! Forcing to 1500"), TagDashSpeed);
-		TagDashSpeed = 1500.0f;
+		UE_LOG(LogTemp, Error, TEXT("TagDashSpeed was %.3f! Forcing to 2000"), TagDashSpeed);
+		TagDashSpeed = 2000.0f;
+	}
+	if (TagCooldown <= 0.0f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("TagCooldown was %.3f! Forcing to 1.5"), TagCooldown);
+		TagCooldown = 1.5f;
+	}
+	if (TagStunDuration <= 0.0f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("TagStunDuration was %.3f! Forcing to 0.5"), TagStunDuration);
+		TagStunDuration = 0.5f;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Tag Dash Config: Duration=%.3f, Speed=%.0f, Reach=%.0f"),
-		TagDashDuration, TagDashSpeed, TagReachDistance);
+	UE_LOG(LogTemp, Log, TEXT("Tag Dash Config: Duration=%.3f, Speed=%.0f, Reach=%.0f, Cooldown=%.2f, Stun=%.2f"),
+		TagDashDuration, TagDashSpeed, TagReachDistance, TagCooldown, TagStunDuration);
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
@@ -117,12 +129,21 @@ void AInputCharacter::Tick(float DeltaTime)
 	{
 		StunTimeRemaining -= DeltaTime;
 
-		// Freeze all movement
-		GetCharacterMovement()->MaxWalkSpeed = 0.0f;
-		GetCharacterMovement()->MaxWalkSpeedCrouched = 0.0f;
-		GetCharacterMovement()->Velocity = FVector::ZeroVector;
+		// Grace period - let momentum carry through briefly before freezing
+		if (StunGracePeriodRemaining > 0.0f)
+		{
+			StunGracePeriodRemaining -= DeltaTime;
+			
+			GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed * (StunGracePeriodRemaining / TagStunGracePeriod);
+		}
+		else
+		{
+			
+			GetCharacterMovement()->MaxWalkSpeed = 0.0f;
+			GetCharacterMovement()->MaxWalkSpeedCrouched = 0.0f;
+			GetCharacterMovement()->Velocity = FVector::ZeroVector;
+		}
 
-		// Debug display
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Red,
@@ -132,12 +153,11 @@ void AInputCharacter::Tick(float DeltaTime)
 		if (StunTimeRemaining <= 0.0f)
 		{
 			bIsStunned = false;
+			StunGracePeriodRemaining = 0.0f;
 			UE_LOG(LogTemp, Log, TEXT("Stun ended - restoring movement"));
 
 			if (bIsSprinting)
 				GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
-			else if (bIsCrouching)
-				GetCharacterMovement()->MaxWalkSpeed = CrouchSpeed;
 			else
 				GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 
@@ -154,6 +174,13 @@ void AInputCharacter::Tick(float DeltaTime)
 
 		UE_LOG(LogTemp, VeryVerbose, TEXT("Dashing: TimeRemaining=%.3f, DeltaTime=%.3f"), TagDashTimeRemaining, DeltaTime);
 
+		// Ensure we're NEVER in crouch mode during dash
+		if (GetCharacterMovement()->IsCrouching())
+		{
+			UnCrouch();
+			UE_LOG(LogTemp, Warning, TEXT("Forced uncrouch during dash!"));
+		}
+
 		TryTag();
 
 		GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed;
@@ -165,8 +192,6 @@ void AInputCharacter::Tick(float DeltaTime)
 			EndDash();
 		}
 
-		if (TagCooldownRemaining > 0.0f) TagCooldownRemaining -= DeltaTime;
-		if (MantleCooldownRemaining > 0.0f) MantleCooldownRemaining -= DeltaTime;
 		return;
 	}
 
@@ -430,12 +455,20 @@ void AInputCharacter::EndSprint()
 //Crouch
 void AInputCharacter::StartCrouch()
 {
-	if (StaminaComponent->CanPerformAction(CrouchStaminaCost) && !bIsCrouching && !bIsMantling && !bIsStunned)
+	// NEVER allow crouch during dash or stun
+	if (bIsDashing || bIsStunned)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot crouch during dash or stun"));
+		return;
+	}
+
+	if (StaminaComponent->CanPerformAction(CrouchStaminaCost) && !bIsCrouching && !bIsMantling)
 	{
 		StaminaComponent->TryConsumeStamina(CrouchStaminaCost);
 		bIsSprinting = false;
 		Crouch();
 		bIsCrouching = true;
+		UE_LOG(LogTemp, Log, TEXT("Crouch started"));
 	}
 }
 
@@ -453,7 +486,7 @@ void AInputCharacter::EndCrouch()
 void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	TargetCrouchEyeOffset.Z = -HalfHeightAdjust;
+	TargetCrouchEyeOffset.Z = -HalfHeightAdjust * 0.5f;
 }
 
 void AInputCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
@@ -465,6 +498,12 @@ void AInputCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeight
 void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
 {
 	Super::CalcCamera(DeltaTime, OutResult);
+
+	if (bIsDashing || bIsStunned)
+	{
+		return;
+	}
+
 	OutResult.Location += CrouchEyeOffset;
 }
 
@@ -532,7 +571,13 @@ void AInputCharacter::CrouchOrSlideHoldEnd()
 
 void AInputCharacter::CrouchOrSlideToggle()
 {
-	if (bIsSprinting && !bIsSliding && !bIsJumping && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
+	if ((bIsDashing || bIsStunned) && !bIsCrouching)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot toggle crouch ON during dash or stun"));
+		return;
+	}
+
+	if (bIsSprinting && !bIsSliding && !bIsJumping && !bIsStunned && GetCharacterMovement()->IsMovingOnGround() && StaminaComponent->CanPerformAction(SlideStaminaCost) && SlideCooldownRemaining <= 0.0f)
 	{
 		StartSlide();
 		bCrouchToggled = false;
@@ -543,11 +588,16 @@ void AInputCharacter::CrouchOrSlideToggle()
 		{
 			EndCrouch();
 			bCrouchToggled = false;
+			UE_LOG(LogTemp, Log, TEXT("Toggle crouch OFF"));
 		}
 		else
 		{
 			StartCrouch();
-			bCrouchToggled = true;
+			if (bIsCrouching)  // Only set toggle if crouch actually started
+			{
+				bCrouchToggled = true;
+				UE_LOG(LogTemp, Log, TEXT("Toggle crouch ON"));
+			}
 		}
 	}
 }
@@ -607,7 +657,7 @@ void AInputCharacter::TryMantle()
 
 	float HeightDifference = LedgeHit.ImpactPoint.Z - CharacterLocation.Z;
 
-	
+
 	if (HeightDifference < MantleMinHeight || HeightDifference > MantleMaxHeight)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Mantle failed: Height difference %f out of range (%f - %f)"),
@@ -640,6 +690,21 @@ void AInputCharacter::TryMantle()
 
 void AInputCharacter::PerformTagDash()
 {
+	if (bIsCrouching)
+	{
+		UnCrouch();
+		bIsCrouching = false;
+		bCrouchToggled = false;
+		TargetCrouchEyeOffset = FVector::ZeroVector;
+		CrouchEyeOffset = FVector::ZeroVector;
+		UE_LOG(LogTemp, Log, TEXT("Auto-uncrouch for tag dash"));
+	}
+	if (bIsSliding)
+	{
+		EndSlide();
+		UE_LOG(LogTemp, Log, TEXT("Auto-end slide for tag dash"));
+	}
+
 	// Cannot dash if: not tagger, stunned, already dashing, in air, or on cooldown
 	if (!bIsTagger || bIsStunned || bIsDashing || bIsJumping || bIsMantling ||
 		!GetCharacterMovement()->IsMovingOnGround() || TagCooldownRemaining > 0.0f)
@@ -661,9 +726,6 @@ void AInputCharacter::PerformTagDash()
 
 	bIsDashing = true;
 	TagDashTimeRemaining = TagDashDuration;
-	UE_LOG(LogTemp, Error, TEXT("DASH SETUP: TagDashDuration=%.3f, TagDashTimeRemaining=%.3f"),
-		TagDashDuration, TagDashTimeRemaining);
-
 
 	FVector InputDirection = GetCharacterMovement()->GetLastInputVector();
 	if (InputDirection.SizeSquared() > 0.01f)
@@ -675,27 +737,29 @@ void AInputCharacter::PerformTagDash()
 		TagDashDirection = GetActorForwardVector();
 	}
 
-	if (bIsSprinting) EndSprint();
-	if (bIsCrouching || bIsSliding)
-	{
-		if (bIsSliding) EndSlide();
 
+	if (bIsSprinting) EndSprint();
+	if (bIsSliding) EndSlide();
+	if (bIsCrouching || GetCharacterMovement()->IsCrouching())
+	{
 		UnCrouch();
 		bIsCrouching = false;
 		bCrouchToggled = false;
-		TargetCrouchEyeOffset = FVector::ZeroVector;
-		CrouchEyeOffset = FVector::ZeroVector;
-		UE_LOG(LogTemp, Warning, TEXT("Forcing uncrouch for dash"));
 	}
-	UE_LOG(LogTemp, Error, TEXT("DASH SETUP: TagDashDuration=%.3f, TagDashTimeRemaining=%.3f"), TagDashDuration, TagDashTimeRemaining);
-	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s"), *TagDashDirection.ToString());
+
+	FVector DashVelocity = TagDashDirection * TagDashSpeed;
+	DashVelocity.Z = GetCharacterMovement()->Velocity.Z;
+	GetCharacterMovement()->Velocity = DashVelocity;
+
+	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s, Speed: %.0f"),
+		*TagDashDirection.ToString(), TagDashSpeed);
 }
 
 void AInputCharacter::TryTag()
 {
 	if (!bIsDashing || !bIsTagger) return;
 
-	
+
 	FVector Start = GetActorLocation();
 	FVector End = Start + (TagDashDirection * TagReachDistance);
 
@@ -726,14 +790,18 @@ void AInputCharacter::TryTag()
 				// Successful tag!
 				UE_LOG(LogTemp, Log, TEXT("TAG! Hit player: %s"), *OtherPlayer->GetName());
 
+				// Notify Blueprint about successful tag
+				OnSuccessfulTag(OtherPlayer);
+
 				OtherPlayer->OnTagged(this);
 				SetTaggerStatus(false);
 				OnBecameHider();
-				EndDash();
+				EndDash(true);  // Pass true to indicate successful tag
 
 				// Apply stun to the NEW tagger (brief grace period)
 				OtherPlayer->bIsStunned = true;
 				OtherPlayer->StunTimeRemaining = TagStunDuration;
+				OtherPlayer->StunGracePeriodRemaining = TagStunGracePeriod;
 
 				break;  // Only tag one player at a time
 			}
@@ -772,37 +840,36 @@ void AInputCharacter::SetTaggerStatus(bool bNewTaggerStatus)
 	}
 }
 
-void AInputCharacter::EndDash()
+void AInputCharacter::EndDash(bool bTagSuccessful)
 {
 	if (!bIsDashing) return;
-
-	UE_LOG(LogTemp, Warning, TEXT("EndDash called: TagDashTimeRemaining=%.3f, bIsCrouching=%d"), TagDashTimeRemaining, bIsCrouching);
 
 	bIsDashing = false;
 	TagDashTimeRemaining = 0.0f;
 	TagCooldownRemaining = TagCooldown;
 
-	// Ensure not in crouch state
-	if (bIsCrouching)
+
+	if (!bTagSuccessful && bIsTagger)
 	{
-		UnCrouch();
-		bIsCrouching = false;
-		bCrouchToggled = false;
-		UE_LOG(LogTemp, Warning, TEXT("EndDash: Force uncrouching!"));
+		bIsStunned = true;
+		StunTimeRemaining = TagStunDuration;
+		StunGracePeriodRemaining = TagStunGracePeriod;
+		bTagFailedThisDash = true;
+
+		UE_LOG(LogTemp, Warning, TEXT("Tag FAILED - Applying stun penalty (%.2fs) with grace period (%.2fs)"),
+			StunTimeRemaining, StunGracePeriodRemaining);
+	}
+	else
+	{
+		bTagFailedThisDash = false;
+		UE_LOG(LogTemp, Log, TEXT("Tag dash ended successfully"));
 	}
 
+	// Restore movement speed
 	if (bIsSprinting)
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 	else
 		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-
-	TargetCrouchEyeOffset = FVector::ZeroVector;
-	CrouchEyeOffset = FVector::ZeroVector;
-
-	TagDashDirection = FVector::ZeroVector;
-
-	UE_LOG(LogTemp, Log, TEXT("Tag dash ended - Speed: %.0f, bIsCrouching: %d"),
-		GetCharacterMovement()->MaxWalkSpeed, bIsCrouching);
 }
 
 
