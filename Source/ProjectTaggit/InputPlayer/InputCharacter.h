@@ -13,10 +13,10 @@ class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* Camera;
 
+protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaminaComponent* StaminaComponent;
 
-protected:
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputMappingContext* InputMapping;
 
