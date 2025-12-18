@@ -7,7 +7,7 @@
 AAITagController::AAITagController()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 0.0f;
+	PrimaryActorTick.TickInterval = 0.0f;  
 }
 
 void AAITagController::BeginPlay()
@@ -105,18 +105,18 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 	switch (ControlledAI->Difficulty)
 	{
 	case EAIDifficulty::Easy:
-		ChaseRadius = 1500.0f;   // 15m
-		SprintRadius = 800.0f;   // 8m
+		ChaseRadius = 6000.0f;   // 60m
+		SprintRadius = 3200.0f;  // 32m
 		DashRadius = 300.0f;     // 3m
 		break;
 	case EAIDifficulty::Medium:
-		ChaseRadius = 2000.0f;   // 20m
-		SprintRadius = 1000.0f;  // 10m
+		ChaseRadius = 8000.0f;   // 80m
+		SprintRadius = 4000.0f;  // 40m
 		DashRadius = 400.0f;     // 4m
 		break;
 	case EAIDifficulty::Hard:
-		ChaseRadius = 3000.0f;   // 30m
-		SprintRadius = 1500.0f;  // 15m
+		ChaseRadius = 12000.0f;  // 120m
+		SprintRadius = 6000.0f;  // 60m
 		DashRadius = 500.0f;     // 5m
 		break;
 	}
@@ -125,7 +125,7 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 	if (DistanceToPlayer > ChaseRadius)
 	{
 		ControlledAI->AIEndSprint();
-		ControlledAI->AIMoveToward(TargetPlayer->GetActorLocation());
+		StopMovement();
 		return;
 	}
 
@@ -144,7 +144,7 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	ControlledAI->AIMoveToward(TargetPlayer->GetActorLocation());
+	MoveToLocation(TargetPlayer->GetActorLocation(), 50.0f);  
 
 	if (GEngine && ControlledAI->Difficulty == EAIDifficulty::Hard)
 	{
@@ -163,7 +163,7 @@ void AAITagController::RunAway(float DistanceToPlayer)
 	if (!ControlledAI || !TargetPlayer) return;
 
 	FVector DirectionAwayFromPlayer = -GetDirectionToPlayer();
-	FVector TargetLocation = ControlledAI->GetActorLocation() + (DirectionAwayFromPlayer * 1000.0f);
+	FVector TargetLocation = ControlledAI->GetActorLocation() + (DirectionAwayFromPlayer * 2000.0f);
 
 	if (DistanceToPlayer < 1000.0f)  // 10m
 	{
@@ -174,7 +174,7 @@ void AAITagController::RunAway(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	ControlledAI->AIMoveToward(TargetLocation);
+	MoveToLocation(TargetLocation, 100.0f);
 
 	UE_LOG(LogTemp, VeryVerbose, TEXT("AI running away from player (Distance: %.1fm)"), DistanceToPlayer / 100.0f);
 }

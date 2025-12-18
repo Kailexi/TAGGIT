@@ -176,18 +176,21 @@ protected:
 	float TagReachDistance = 150.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagStunDuration = 0.5f;
+	float TagStunDuration = 0.5f; 
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagStunGracePeriod = 0.15f;
+	float TaggedStunDuration = 2.5f;  
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagCooldown = 1.5f;
+	float TagStunGracePeriod = 0.15f;  
+
+	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
+	float TagCooldown = 1.5f;  
 
 	float TagDashTimeRemaining = 0.0f;
 	float TagCooldownRemaining = 0.0f;
 	float StunTimeRemaining = 0.0f;
-	float StunGracePeriodRemaining = 0.0f;
+	float StunGracePeriodRemaining = 0.0f;  
 	FVector TagDashDirection;
 
 	// Crouching parameters
@@ -220,7 +223,7 @@ protected:
 	bool bTagFailedThisDash = false;  // Track if dash ended without tagging anyone
 
 	UPROPERTY(BlueprintReadWrite, Category = "GameState")
-	bool bIsTagger = false;
+	bool bIsTagger = false; 
 
 
 

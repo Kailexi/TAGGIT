@@ -69,9 +69,7 @@ AInputCharacter::AInputCharacter()
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
 	bIsTagger = false;
-	TagCooldownRemaining = 0.5f;
 
 	if (bIsTagger) {
 		UE_LOG(LogTemp, Warning, TEXT("Player started as TAGGER"));
@@ -407,7 +405,7 @@ void AInputCharacter::ReleaseJump()
 		? FMath::Clamp((LeapChargeTime - LeapMinChargeTime) / (LeapMaxChargeTime - LeapMinChargeTime), 0.0f, 1.0f)
 		: 0.0f;
 
-	const float TotalStamina = LeapExtraStaminaCost * ChargeFraction;
+	const float TotalStamina = LeapExtraStaminaCost * ChargeFraction;  // Only leap costs stamina
 
 	if (!StaminaComponent->CanPerformAction(TotalStamina))
 	{
@@ -760,7 +758,7 @@ void AInputCharacter::PerformTagDash()
 	}
 
 	FVector DashVelocity = TagDashDirection * TagDashSpeed;
-	DashVelocity.Z = GetCharacterMovement()->Velocity.Z; 
+	DashVelocity.Z = GetCharacterMovement()->Velocity.Z;
 	GetCharacterMovement()->Velocity = DashVelocity;
 
 	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s, Speed: %.0f"),
@@ -810,9 +808,9 @@ void AInputCharacter::TryTag()
 				OnBecameHider();
 				EndDash(true);  // Pass true to indicate successful tag
 
-				// Apply stun to the NEW tagger (brief grace period)
+
 				OtherPlayer->bIsStunned = true;
-				OtherPlayer->StunTimeRemaining = TagStunDuration;
+				OtherPlayer->StunTimeRemaining = TaggedStunDuration;
 				OtherPlayer->StunGracePeriodRemaining = TagStunGracePeriod;
 
 				break;  // Only tag one player at a time
