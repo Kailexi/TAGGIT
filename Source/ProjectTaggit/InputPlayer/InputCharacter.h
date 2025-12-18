@@ -68,6 +68,17 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "GameState")
 	void OnSuccessfulTag(AInputCharacter* TaggedPlayer);
 
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool IsTagger() const { return bIsTagger; }
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool IsStunned() const { return bIsStunned; }
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool DidTagFail() const { return bTagFailedThisDash; }
+
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	bool IsSprinting() const { return bIsSprinting; }
 
 protected:
 	void Move(const FInputActionValue& InputValue);
@@ -91,17 +102,6 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "GameState")
 	void SetTaggerStatus(bool bNewTaggerStatus);
-
-	UFUNCTION(BlueprintCallable, Category = "GameState")
-	bool IsTagger() const { return bIsTagger; }
-
-	UFUNCTION(BlueprintCallable, Category = "GameState")
-	bool IsStunned() const { return bIsStunned; }
-
-	UFUNCTION(BlueprintCallable, Category = "GameState")
-	bool DidTagFail() const { return bTagFailedThisDash; }
-
-
 
 	//Movement 
 	UPROPERTY(EditAnywhere, Category = "Movement|Walk")
