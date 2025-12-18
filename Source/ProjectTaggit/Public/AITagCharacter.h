@@ -75,5 +75,5 @@ private:
 
 	//timers
 	float UpdatePlayerCacheTimer = 0.0f;
-	float UpdatePlayerCacheInterval = 1.0f;  // Update every second
+	float UpdatePlayerCacheInterval = 1.0f;
 };

@@ -170,24 +170,24 @@ protected:
 	float TagDashSpeed = 2000.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagDashDuration = 0.75f;  // Longer dash duration
+	float TagDashDuration = 0.75f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
 	float TagReachDistance = 150.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagStunDuration = 0.5f;  // Stun on failed tag
+	float TagStunDuration = 0.5f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagStunGracePeriod = 0.15f;  // Time before stun fully freezes movement (keep dash momentum)
+	float TagStunGracePeriod = 0.15f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagCooldown = 1.5f;  // Prevent chaining tags
+	float TagCooldown = 1.5f;
 
 	float TagDashTimeRemaining = 0.0f;
 	float TagCooldownRemaining = 0.0f;
 	float StunTimeRemaining = 0.0f;
-	float StunGracePeriodRemaining = 0.0f;  // Time before stun fully freezes movement
+	float StunGracePeriodRemaining = 0.0f;
 	FVector TagDashDirection;
 
 	// Crouching parameters
@@ -220,7 +220,7 @@ protected:
 	bool bTagFailedThisDash = false;  // Track if dash ended without tagging anyone
 
 	UPROPERTY(BlueprintReadWrite, Category = "GameState")
-	bool bIsTagger = false;  // True if this player is "it", false if hiding
+	bool bIsTagger = false;
 
 
 

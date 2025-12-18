@@ -72,7 +72,6 @@ void AAITagCharacter::AIPerformTagDash(FVector Direction)
 		return;
 	}
 
-	// Consume stamina
 	StaminaComponent->TryConsumeStamina(TagDashStaminaCost);
 
 	// Set up dash
