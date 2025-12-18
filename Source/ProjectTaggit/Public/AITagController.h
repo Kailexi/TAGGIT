@@ -26,10 +26,13 @@ private:
 
 	// Behavior timers
 	float UpdateTargetTimer = 0.0f;
-	float UpdateTargetInterval = 0.5f;  
+	float UpdateTargetInterval = 0.5f;
 
 	float BehaviorUpdateTimer = 0.0f;
 	float BehaviorUpdateInterval = 0.1f;
+
+	float AbilityCheckTimer = 0.0f;
+	float AbilityCheckInterval = 0.3f;
 
 	// AI Logic Functions
 	void UpdateTarget();
@@ -38,8 +41,21 @@ private:
 	void RunAway(float DistanceToPlayer);
 	void PerformDashAttack(const FVector& DirectionToPlayer);
 
+	void CheckAdvancedAbilities(float DistanceToPlayer, bool bIsChasing);
+	void TryLeap(const FVector& TargetDirection);
+	void TrySlide();
+	void TryMantle();
+	void ManageCrouch(bool bShouldCrouch);
+
+	bool ShouldConserveStamina() const;
+	float GetStaminaReserve() const;
+
+	FVector PredictPlayerPosition(float TimeAhead) const;
+	FVector GetPredictedDirection() const;
+
 	// Helper functions
 	float GetDistanceToPlayer() const;
 	FVector GetDirectionToPlayer() const;
 	bool IsPlayerVisible() const;
+	float GetHeightDifference() const;
 };

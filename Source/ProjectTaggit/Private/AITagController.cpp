@@ -7,7 +7,7 @@
 AAITagController::AAITagController()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 0.0f;  
+	PrimaryActorTick.TickInterval = 0.0f;
 }
 
 void AAITagController::BeginPlay()
@@ -56,6 +56,15 @@ void AAITagController::Tick(float DeltaTime)
 		BehaviorUpdateTimer = 0.0f;
 		UpdateBehavior(DeltaTime);
 	}
+
+	AbilityCheckTimer += DeltaTime;
+	if (AbilityCheckTimer >= AbilityCheckInterval)
+	{
+		AbilityCheckTimer = 0.0f;
+		float DistanceToPlayer = GetDistanceToPlayer();
+		bool bIsChasing = ControlledAI->IsTagger();
+		CheckAdvancedAbilities(DistanceToPlayer, bIsChasing);
+	}
 }
 
 void AAITagController::UpdateTarget()
@@ -80,6 +89,17 @@ void AAITagController::UpdateBehavior(float DeltaTime)
 
 	float DistanceToPlayer = GetDistanceToPlayer();
 
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			1, 0.0f, FColor::Cyan,
+			FString::Printf(TEXT("AI: IsTagger=%d, Player IsTagger=%d, Dist=%.1fm"),
+				ControlledAI->IsTagger(),
+				TargetPlayer->IsTagger(),
+				DistanceToPlayer / 100.0f)
+		);
+	}
+
 	// AI is the tagger - chase player
 	if (ControlledAI->IsTagger())
 	{
@@ -96,7 +116,9 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 {
 	if (!ControlledAI || !TargetPlayer) return;
 
-	FVector DirectionToPlayer = GetDirectionToPlayer();
+	FVector DirectionToPlayer = (ControlledAI->Difficulty == EAIDifficulty::Hard)
+		? GetPredictedDirection()
+		: GetDirectionToPlayer();
 
 	float ChaseRadius = ControlledAI->ChaseRadius;
 	float SprintRadius = ControlledAI->SprintRadius;
@@ -121,11 +143,18 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		break;
 	}
 
-	//Patrol logic
 	if (DistanceToPlayer > ChaseRadius)
 	{
 		ControlledAI->AIEndSprint();
 		StopMovement();
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				3, 0.0f, FColor::Orange,
+				TEXT("AI IDLE - Player too far")
+			);
+		}
 		return;
 	}
 
@@ -144,13 +173,13 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	MoveToLocation(TargetPlayer->GetActorLocation(), 50.0f);  
+	ControlledAI->AddMovementInput(DirectionToPlayer, 1.0f);
 
-	if (GEngine && ControlledAI->Difficulty == EAIDifficulty::Hard)
+	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(
-			INDEX_NONE, 0.0f, FColor::Yellow,
-			FString::Printf(TEXT("AI Chase: Dist=%.1fm, Sprint=%d, CanDash=%d"),
+			3, 0.0f, FColor::Green,
+			FString::Printf(TEXT("AI CHASING: Dist=%.1fm, Sprint=%d, CanDash=%d"),
 				DistanceToPlayer / 100.0f,
 				ControlledAI->IsSprinting(),
 				ControlledAI->CanUseDash())
@@ -162,10 +191,12 @@ void AAITagController::RunAway(float DistanceToPlayer)
 {
 	if (!ControlledAI || !TargetPlayer) return;
 
-	FVector DirectionAwayFromPlayer = -GetDirectionToPlayer();
-	FVector TargetLocation = ControlledAI->GetActorLocation() + (DirectionAwayFromPlayer * 2000.0f);
+	StopMovement();
 
-	if (DistanceToPlayer < 1000.0f)  // 10m
+	FVector DirectionAwayFromPlayer = -GetDirectionToPlayer();
+	FVector TargetLocation = ControlledAI->GetActorLocation() + (DirectionAwayFromPlayer * 2000.0f);  // Run 20m away
+
+	if (DistanceToPlayer < 4000.0f)  // 40m
 	{
 		ControlledAI->AIStartSprint();
 	}
@@ -174,9 +205,19 @@ void AAITagController::RunAway(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	MoveToLocation(TargetLocation, 100.0f);
+	ControlledAI->AddMovementInput(DirectionAwayFromPlayer, 1.0f);
 
-	UE_LOG(LogTemp, VeryVerbose, TEXT("AI running away from player (Distance: %.1fm)"), DistanceToPlayer / 100.0f);
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			2, 0.0f, FColor::Red,
+			FString::Printf(TEXT("AI RUNNING AWAY! Dist=%.1fm, Sprint=%d"),
+				DistanceToPlayer / 100.0f,
+				ControlledAI->IsSprinting())
+		);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("AI running away from player (Distance: %.1fm)"), DistanceToPlayer / 100.0f);
 }
 
 void AAITagController::PerformDashAttack(const FVector& DirectionToPlayer)
@@ -222,6 +263,154 @@ bool AAITagController::IsPlayerVisible() const
 		QueryParams
 	);
 
-	// Player is visible if we hit the player or nothing
 	return !bHit || HitResult.GetActor() == TargetPlayer;
+}
+
+void AAITagController::CheckAdvancedAbilities(float DistanceToPlayer, bool bIsChasing)
+{
+	if (!ControlledAI || !TargetPlayer) return;
+
+	if (ControlledAI->Difficulty == EAIDifficulty::Easy) return;
+
+	if (ShouldConserveStamina()) return;
+
+	if (ControlledAI->Difficulty == EAIDifficulty::Hard)
+	{
+		TryMantle();
+	}
+
+	if (bIsChasing && DistanceToPlayer > 1000.0f)
+	{
+		TrySlide();
+	}
+
+	if (ControlledAI->Difficulty == EAIDifficulty::Hard)
+	{
+		float HeightDiff = GetHeightDifference();
+		if (FMath::Abs(HeightDiff) > 100.0f)
+		{
+			FVector Direction = bIsChasing ? GetDirectionToPlayer() : -GetDirectionToPlayer();
+			TryLeap(Direction);
+		}
+	}
+
+	if (!bIsChasing)
+	{
+		ManageCrouch(DistanceToPlayer < 2000.0f);
+	}
+}
+
+void AAITagController::TryLeap(const FVector& TargetDirection)
+{
+	if (!ControlledAI) return;
+
+	if (ControlledAI->IsJumping() || ControlledAI->IsMantling() || ControlledAI->IsChargingLeap()) return;
+
+	if (!ControlledAI->HasStaminaFor(ControlledAI->GetLeapCost())) return;
+
+	ControlledAI->AIStartLeap(0.5f);
+
+	UE_LOG(LogTemp, Log, TEXT("AI using leap!"));
+}
+
+void AAITagController::TrySlide()
+{
+	if (!ControlledAI) return;
+
+	if (!ControlledAI->IsSprinting()) return;
+
+	if (ControlledAI->GetSlideCooldown() > 0.0f) return;
+
+	if (!ControlledAI->HasStaminaFor(ControlledAI->GetSlideCost())) return;
+
+	ControlledAI->AIStartSlide();
+
+	UE_LOG(LogTemp, Log, TEXT("AI sliding!"));
+}
+
+void AAITagController::TryMantle()
+{
+	if (!ControlledAI) return;
+
+	// Check cooldown
+	if (ControlledAI->GetMantleCooldown() > 0.0f) return;
+
+	// Check stamina
+	if (!ControlledAI->HasStaminaFor(ControlledAI->GetMantleCost())) return;
+
+	// Try mantle
+	ControlledAI->AITryMantle();
+}
+
+void AAITagController::ManageCrouch(bool bShouldCrouch)
+{
+	if (!ControlledAI) return;
+
+	if (bShouldCrouch && !ControlledAI->IsCrouching())
+	{
+		ControlledAI->AIStartCrouch();
+	}
+	else if (!bShouldCrouch && ControlledAI->IsCrouching())
+	{
+		ControlledAI->AIEndCrouch();
+	}
+}
+
+
+bool AAITagController::ShouldConserveStamina() const
+{
+	if (!ControlledAI) return true;
+
+	float StaminaPercent = ControlledAI->GetStaminaPercentage();
+	float Reserve = GetStaminaReserve();
+
+	return StaminaPercent < Reserve;
+}
+
+float AAITagController::GetStaminaReserve() const
+{
+	if (!ControlledAI) return 0.5f;
+
+	switch (ControlledAI->Difficulty)
+	{
+	case EAIDifficulty::Easy:
+		return 0.3f;
+	case EAIDifficulty::Medium:
+		return 0.25f;
+	case EAIDifficulty::Hard:
+		return 0.20f;
+	default:
+		return 0.25f;
+	}
+}
+
+FVector AAITagController::PredictPlayerPosition(float TimeAhead) const
+{
+	if (!TargetPlayer) return FVector::ZeroVector;
+
+	FVector CurrentPos = TargetPlayer->GetActorLocation();
+	FVector Velocity = TargetPlayer->GetVelocity();
+
+	return CurrentPos + (Velocity * TimeAhead);
+}
+
+FVector AAITagController::GetPredictedDirection() const
+{
+	if (!ControlledAI || !TargetPlayer) return FVector::ZeroVector;
+
+	if (ControlledAI->Difficulty != EAIDifficulty::Hard)
+	{
+		return GetDirectionToPlayer();
+	}
+
+	FVector PredictedPos = PredictPlayerPosition(0.5f);
+	FVector Direction = PredictedPos - ControlledAI->GetActorLocation();
+	return Direction.GetSafeNormal();
+}
+
+float AAITagController::GetHeightDifference() const
+{
+	if (!ControlledAI || !TargetPlayer) return 0.0f;
+
+	return TargetPlayer->GetActorLocation().Z - ControlledAI->GetActorLocation().Z;
 }
