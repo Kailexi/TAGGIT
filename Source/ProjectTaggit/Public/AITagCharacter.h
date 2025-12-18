@@ -72,7 +72,7 @@ private:
 	UPROPERTY()
 	AInputCharacter* CachedPlayer = nullptr;
 
-	//timers
+
 	float UpdatePlayerCacheTimer = 0.0f;
 	float UpdatePlayerCacheInterval = 1.0f;
 };
