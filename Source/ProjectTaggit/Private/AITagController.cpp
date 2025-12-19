@@ -70,7 +70,7 @@ void AAITagController::Tick(float DeltaTime)
 	{
 		AbilityCheckTimer = 0.0f;
 		float DistanceToPlayer = GetDistanceToPlayer();
-		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();  
+		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();
 
 		UE_LOG(LogTemp, VeryVerbose, TEXT("Ability Check: Difficulty=%d, Stamina=%.1f%%, Chasing=%d"),
 			static_cast<int32>(ControlledAI->Difficulty),
@@ -144,9 +144,27 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 {
 	if (!ControlledAI || !TargetPlayer) return;
 
-	FVector DirectionToPlayer = (ControlledAI->Difficulty == EAIDifficulty::Hard)
-		? GetPredictedDirection()
-		: GetDirectionToPlayer();
+	FVector TacticalTarget = GetTacticalPosition(true, DistanceToPlayer);
+	FVector DirectionToPlayer;
+
+	if (!TacticalTarget.IsZero())
+	{
+		DirectionToPlayer = (TacticalTarget - ControlledAI->GetActorLocation()).GetSafeNormal();
+	}
+	else
+	{
+		DirectionToPlayer = (ControlledAI->Difficulty == EAIDifficulty::Hard)
+			? GetPredictedDirection()
+			: GetDirectionToPlayer();
+	}
+
+	DirectionToPlayer = AvoidObstacles(DirectionToPlayer);
+
+	if (ShouldAvoidEdge(DirectionToPlayer))
+	{
+		DirectionToPlayer = DirectionToPlayer.RotateAngleAxis(90.0f, FVector::UpVector);
+		UE_LOG(LogTemp, Warning, TEXT("    ChasePlayer: Avoiding edge, turning"));
+	}
 
 	float ChaseRadius = ControlledAI->ChaseRadius;
 	float SprintRadius = ControlledAI->SprintRadius;
@@ -156,12 +174,12 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 	{
 	case EAIDifficulty::Easy:
 		ChaseRadius = 6000.0f;   // 60m 
-		SprintRadius = 3200.0f;  // 32m
+		SprintRadius = 3200.0f;  // 32m 
 		DashRadius = 300.0f;     // 3m
 		break;
 	case EAIDifficulty::Medium:
 		ChaseRadius = 8000.0f;   // 80m 
-		SprintRadius = 4000.0f;  // 40m
+		SprintRadius = 4000.0f;  // 40m 
 		DashRadius = 400.0f;     // 4m
 		break;
 	case EAIDifficulty::Hard:
@@ -170,7 +188,7 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		DashRadius = 500.0f;     // 5m
 		break;
 	}
-
+	
 	// Too far - patrol/idle
 	if (DistanceToPlayer > ChaseRadius)
 	{
@@ -187,14 +205,12 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		return;
 	}
 
-	// Close enough to dash
 	if (DistanceToPlayer <= DashRadius && ControlledAI->CanUseDash())
 	{
 		PerformDashAttack(DirectionToPlayer);
 		return;
 	}
 
-	// Sprint range - run toward player
 	bool bShouldSprint = (DistanceToPlayer <= SprintRadius && ControlledAI->Difficulty != EAIDifficulty::Easy);
 	if (bShouldSprint)
 	{
@@ -205,7 +221,6 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	// Force velocity directly - AddMovementInput doesn't work for AI
 	UCharacterMovementComponent* MovementComp = ControlledAI->GetCharacterMovement();
 	if (!MovementComp)
 	{
@@ -217,15 +232,11 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 	bool bIsSprinting = ControlledAI->IsSprinting();
 	FVector CurrentVelocity = MovementComp->Velocity;
 
-	// Force velocity directly when on ground (same fix as RunAway)
 	if (bIsOnGround)
 	{
-		// Calculate desired velocity based on max walk speed
 		FVector DesiredVelocity = DirectionToPlayer * MovementComp->MaxWalkSpeed;
-		// Preserve Z velocity for gravity
 		DesiredVelocity.Z = CurrentVelocity.Z;
 
-		// Apply velocity directly
 		MovementComp->Velocity = DesiredVelocity;
 
 		UE_LOG(LogTemp, VeryVerbose, TEXT("    ChasePlayer: FORCING velocity - Dir=(%.2f,%.2f,%.2f), Sprint=%d, MaxSpeed=%.0f, NewVel=(%.0f,%.0f,%.0f)"),
@@ -258,8 +269,27 @@ void AAITagController::RunAway(float DistanceToPlayer)
 {
 	if (!ControlledAI || !TargetPlayer) return;
 
-	// Run in opposite direction from player
-	FVector DirectionAwayFromPlayer = -GetDirectionToPlayer();
+	FVector TacticalTarget = GetTacticalPosition(false, DistanceToPlayer);
+	FVector DirectionAwayFromPlayer;
+
+	if (!TacticalTarget.IsZero())
+	{
+		DirectionAwayFromPlayer = (TacticalTarget - ControlledAI->GetActorLocation()).GetSafeNormal();
+		UE_LOG(LogTemp, VeryVerbose, TEXT("    RunAway: Using tactical position"));
+	}
+	else
+	{
+		DirectionAwayFromPlayer = -GetDirectionToPlayer();
+	}
+
+	DirectionAwayFromPlayer = AvoidObstacles(DirectionAwayFromPlayer);
+
+	if (ShouldAvoidEdge(DirectionAwayFromPlayer))
+	{
+		// Turn to avoid edge
+		DirectionAwayFromPlayer = DirectionAwayFromPlayer.RotateAngleAxis(90.0f, FVector::UpVector);
+		UE_LOG(LogTemp, Warning, TEXT("    RunAway: Avoiding edge, turning"));
+	}
 
 	UE_LOG(LogTemp, Warning, TEXT("    RunAway: Dir=(%.2f,%.2f,%.2f), Dist=%.1fm"),
 		DirectionAwayFromPlayer.X, DirectionAwayFromPlayer.Y, DirectionAwayFromPlayer.Z,
@@ -474,7 +504,7 @@ void AAITagController::TryLeap(const FVector& TargetDirection)
 		return;
 	}
 
-	ControlledAI->AIStartLeap(0.5f);
+	ControlledAI->AIStartLeap(0.5f); 
 
 	UE_LOG(LogTemp, Warning, TEXT("AI LEAPING! Stamina: %.1f%%"),
 		ControlledAI->GetStaminaPercentage() * 100.0f);
@@ -565,16 +595,15 @@ float AAITagController::GetStaminaReserve() const
 	switch (ControlledAI->Difficulty)
 	{
 	case EAIDifficulty::Easy:
-		return 0.15f;  
+		return 0.15f;
 	case EAIDifficulty::Medium:
-		return 0.10f;  
+		return 0.10f;
 	case EAIDifficulty::Hard:
-		return 0.05f;  
+		return 0.05f;
 	default:
 		return 0.10f;
 	}
 }
-
 
 FVector AAITagController::PredictPlayerPosition(float TimeAhead) const
 {
@@ -758,7 +787,7 @@ bool AAITagController::DetectEdge(const FVector& Direction, float Range) const
 	if (!ControlledAI || !GetWorld()) return false;
 
 	FVector Start = ControlledAI->GetActorLocation() + (Direction * 100.0f);
-	FVector End = Start + (FVector::DownVector * 500.0f);
+	FVector End = Start + (FVector::DownVector * 500.0f); 
 
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
@@ -782,4 +811,160 @@ bool AAITagController::DetectEdge(const FVector& Direction, float Range) const
 #endif
 
 	return bEdgeDetected;
+}
+
+
+FVector AAITagController::AvoidObstacles(const FVector& DesiredDirection)
+{
+	if (!ControlledAI) return DesiredDirection;
+
+	if (!CurrentObservation.bObstacleAhead)
+	{
+		return DesiredDirection;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Obstacle ahead! Steering around (Left=%d, Right=%d)"),
+		CurrentObservation.bObstacleLeft,
+		CurrentObservation.bObstacleRight);
+
+	if (!CurrentObservation.bObstacleLeft && !CurrentObservation.bObstacleRight)
+	{
+		FVector SteerDirection = DesiredDirection.RotateAngleAxis(45.0f, FVector::UpVector);
+		UE_LOG(LogTemp, Log, TEXT("Both sides clear - steering right"));
+		return SteerDirection.GetSafeNormal();
+	}
+	else if (!CurrentObservation.bObstacleLeft)
+	{
+		FVector SteerDirection = DesiredDirection.RotateAngleAxis(-45.0f, FVector::UpVector);
+		UE_LOG(LogTemp, Log, TEXT("Steering left to avoid obstacle"));
+		return SteerDirection.GetSafeNormal();
+	}
+	else if (!CurrentObservation.bObstacleRight)
+	{
+		FVector SteerDirection = DesiredDirection.RotateAngleAxis(45.0f, FVector::UpVector);
+		UE_LOG(LogTemp, Log, TEXT("Steering right to avoid obstacle"));
+		return SteerDirection.GetSafeNormal();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Blocked on all sides! Backing up"));
+		return -DesiredDirection.GetSafeNormal();
+	}
+}
+
+bool AAITagController::ShouldAvoidEdge(const FVector& MovementDirection)
+{
+	if (!CurrentObservation.bEdgeAhead)
+	{
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("EDGE DETECTED AHEAD! Avoiding..."));
+	return true;
+}
+
+FVector AAITagController::FindCoverPosition()
+{
+	if (!ControlledAI || !TargetPlayer) return FVector::ZeroVector;
+
+	FVector AIPos = ControlledAI->GetActorLocation();
+	FVector PlayerPos = TargetPlayer->GetActorLocation();
+	FVector DirectionFromPlayer = (AIPos - PlayerPos).GetSafeNormal();
+
+	float BestCoverScore = -1.0f;
+	FVector BestCoverPos = FVector::ZeroVector;
+
+	for (int i = -3; i <= 3; i++)
+	{
+		float Angle = i * 30.0f;  // -90 to +90 degrees
+		FVector SearchDir = DirectionFromPlayer.RotateAngleAxis(Angle, FVector::UpVector);
+		float SearchDistance = 1000.0f;  // 10m
+
+		FHitResult HitResult;
+		FVector Start = AIPos;
+		FVector End = Start + (SearchDir * SearchDistance);
+
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(ControlledAI);
+		QueryParams.AddIgnoredActor(TargetPlayer);
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
+		{
+			FVector CoverPos = HitResult.Location;
+			FVector ToCover = (CoverPos - PlayerPos).GetSafeNormal();
+			FVector ToPlayer = (PlayerPos - CoverPos).GetSafeNormal();
+
+			// For true rand i went with a score system here it is based upon some shit here below:
+			// 1. Distance from player
+			// 2. Angle
+			float DistanceScore = FVector::Dist(CoverPos, PlayerPos) / 1000.0f;  
+			float AngleScore = FMath::Abs(FVector::DotProduct(ToCover, DirectionFromPlayer));
+
+			float TotalScore = DistanceScore + AngleScore;
+
+			if (TotalScore > BestCoverScore)
+			{
+				BestCoverScore = TotalScore;
+				BestCoverPos = CoverPos;
+			}
+		}
+	}
+
+	if (BestCoverScore > 0.0f)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Found cover position! Score=%.2f"), BestCoverScore);
+		CurrentObservation.bCoverNearby = true;
+		return BestCoverPos;
+	}
+
+	CurrentObservation.bCoverNearby = false;
+	return FVector::ZeroVector;
+}
+
+FVector AAITagController::GetTacticalPosition(bool bIsChasing, float DistanceToPlayer)
+{
+	if (!ControlledAI || !TargetPlayer) return FVector::ZeroVector;
+
+	FVector AIPos = ControlledAI->GetActorLocation();
+	FVector PlayerPos = TargetPlayer->GetActorLocation();
+
+	if (bIsChasing)
+	{
+
+		FVector PlayerVelocity = CurrentObservation.PlayerVelocity;
+		float PlayerSpeed = CurrentObservation.PlayerSpeed;
+
+		if (PlayerSpeed > 100.0f)  
+		{
+			float TimeToIntercept = DistanceToPlayer / 1000.0f;  
+			FVector PredictedPos = PlayerPos + (PlayerVelocity * TimeToIntercept);
+
+			UE_LOG(LogTemp, VeryVerbose, TEXT("Tactical Chase: Intercepting predicted position"));
+			return PredictedPos;
+		}
+		else
+		{
+			return PlayerPos;
+		}
+	}
+	else
+	{
+		FVector CoverPos = FindCoverPosition();
+
+		if (!CoverPos.IsZero() && DistanceToPlayer < 2000.0f)  
+		{
+			UE_LOG(LogTemp, Log, TEXT("Tactical Flee: Moving to cover"));
+			return CoverPos;
+		}
+		else
+		{
+			FVector DirectionAway = (AIPos - PlayerPos).GetSafeNormal();
+
+			float ZigzagAngle = FMath::Sin(GetWorld()->GetTimeSeconds() * 2.0f) * 30.0f;
+			FVector ZigzagDirection = DirectionAway.RotateAngleAxis(ZigzagAngle, FVector::UpVector);
+
+			FVector TargetPos = AIPos + (ZigzagDirection * 1000.0f);  // 10m ahead
+			return TargetPos;
+		}
+	}
 }

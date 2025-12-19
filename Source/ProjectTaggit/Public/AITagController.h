@@ -48,7 +48,7 @@ struct FAIObservation
 	float DistanceToPlayer = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
-	float HeightDifference = 0.0f;  
+	float HeightDifference = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
 	FVector DirectionToPlayer = FVector::ZeroVector;
@@ -58,7 +58,7 @@ struct FAIObservation
 
 	// Environmental sensors 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
-	bool bObstacleAhead = false;  
+	bool bObstacleAhead = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
 	bool bObstacleLeft = false;
@@ -67,13 +67,13 @@ struct FAIObservation
 	bool bObstacleRight = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
-	bool bEdgeAhead = false; 
+	bool bEdgeAhead = false;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
 	float ObstacleDistance = 0.0f;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
-	bool bCoverNearby = false;  
+	bool bCoverNearby = false; 
 };
 
 UCLASS()
@@ -111,7 +111,7 @@ private:
 	FAIObservation CurrentObservation;
 	FVector PreviousPlayerPosition = FVector::ZeroVector;
 	float ObservationUpdateTimer = 0.0f;
-	float ObservationUpdateInterval = 0.1f;
+	float ObservationUpdateInterval = 0.1f;  // Update observations every 0.1s
 
 	// Environmental sensors
 	float SensorRange = 500.0f;  
@@ -131,7 +131,11 @@ private:
 	bool DetectObstacle(const FVector& Direction, float Range) const;
 	bool DetectEdge(const FVector& Direction, float Range) const;
 
-	// Ability checks
+	// Ability checks and maneuvers update lmao
+	FVector AvoidObstacles(const FVector& DesiredDirection);
+	bool ShouldAvoidEdge(const FVector& MovementDirection);
+	FVector FindCoverPosition();
+	FVector GetTacticalPosition(bool bIsChasing, float DistanceToPlayer);
 	void CheckAdvancedAbilities(float DistanceToPlayer, bool bIsChasing);
 	void TryLeap(const FVector& TargetDirection);
 	void TrySlide();
@@ -140,7 +144,6 @@ private:
 
 	bool ShouldConserveStamina() const;
 	float GetStaminaReserve() const;
-
 	FVector PredictPlayerPosition(float TimeAhead) const;
 	FVector GetPredictedDirection() const;
 
