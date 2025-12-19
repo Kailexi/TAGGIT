@@ -1,4 +1,3 @@
-
 #pragma once
 #include "CoreMinimal.h"
 #include "ProjectTaggit/InputPlayer/InputCharacter.h"
@@ -28,18 +27,17 @@ public:
 
 	// AI Behavior Parameters
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float ChaseRadius = 2000.0f;  // (20m)
+	float ChaseRadius = 2000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float DashRadius = 400.0f;    // (4m)
+	float DashRadius = 400.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float SprintRadius = 1000.0f; //  (10m)
+	float SprintRadius = 1000.0f; 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float PatrolRadius = 500.0f;  //  (5m)
+	float PatrolRadius = 500.0f;  
 
-	// AI Movement Functions
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void AIMoveToward(FVector TargetLocation);
 
@@ -52,7 +50,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void AIEndSprint();
 
-	// AI State Queries
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIStartLeap(float ChargeTime = 0.5f);  
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIReleaseLeap();  
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIStartSlide();  
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIEndSlide(); 
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AITryMantle();  
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIStartCrouch();  
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIEndCrouch();  
+
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	float GetDistanceToPlayer() const;
 
@@ -61,6 +78,44 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	bool CanUseDash() const;
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	float GetCurrentStamina() const;
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	float GetStaminaPercentage() const;
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool HasStaminaFor(float Cost) const;
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool IsJumping() const { return bIsJumping; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool IsMantling() const { return bIsMantling; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool IsChargingLeap() const { return bIsChargingLeap; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool IsCrouching() const { return bIsCrouching; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool IsSliding() const { return bIsSliding; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	float GetSlideCooldown() const { return SlideCooldownRemaining; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	float GetMantleCooldown() const { return MantleCooldownRemaining; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Costs")
+	float GetLeapCost() const { return LeapExtraStaminaCost; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Costs")
+	float GetSlideCost() const { return SlideStaminaCost; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Costs")
+	float GetMantleCost() const { return MantleStaminaCost; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -75,5 +130,9 @@ private:
 
 	//timers
 	float UpdatePlayerCacheTimer = 0.0f;
-	float UpdatePlayerCacheInterval = 1.0f;  // Update every second
+	float UpdatePlayerCacheInterval = 1.0f;
+
+	float LeapChargeTimer = 0.0f;
+	float TargetLeapChargeTime = 0.0f;
+	bool bIsChargingLeapAI = false;
 };
