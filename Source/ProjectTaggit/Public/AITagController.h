@@ -83,6 +83,13 @@ class PROJECTTAGGIT_API AAITagController : public AAIController
 public:
 	AAITagController();
 
+	UFUNCTION(BlueprintCallable, Category = "AI|Learning")
+	FAIObservation GetCurrentObservation() const { return CurrentObservation; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Learning")
+	void ExecuteMLAction(FVector MoveDirection, bool bSprint, bool bLeap, bool bSlide, bool bDash, bool bCrouch);
+
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnPossess(APawn* InPawn) override;

@@ -1434,3 +1434,43 @@ void AAITagController::StopAndResetNavMesh()
 
 	UE_LOG(LogTemp, Warning, TEXT("NavMesh reset - cleared pathfinding state"));
 }
+
+void AAITagController::ExecuteMLAction(FVector MoveDirection, bool bSprint, bool bLeap, bool bSlide, bool bDash, bool bCrouch)
+{
+	if (!ControlledAI) return;
+
+	if (!MoveDirection.IsNearlyZero())
+	{
+		FVector TargetLocation = ControlledAI->GetActorLocation() + (MoveDirection * 1000.0f);
+		MoveToLocationWithNav(TargetLocation);
+	}
+
+	//Sprint control
+	if (bSprint)
+		ControlledAI->AIStartSprint();
+	else
+		ControlledAI->AIEndSprint();
+
+	//Abilities
+	if (bLeap && !ControlledAI->IsJumping() && !ControlledAI->IsChargingLeap())
+	{
+		ControlledAI->AIStartLeap(0.3f);
+	}
+
+	if (bSlide && ControlledAI->IsSprinting() && !ControlledAI->IsSliding())
+	{
+		ControlledAI->AIStartSlide();
+	}
+
+	if (bDash && ControlledAI->CanUseDash())
+	{
+		ControlledAI->AIPerformTagDash(MoveDirection);
+	}
+
+	//Crouch control
+	if (bCrouch && !ControlledAI->IsCrouching())
+		ControlledAI->AIStartCrouch();
+	else if (!bCrouch && ControlledAI->IsCrouching())
+		ControlledAI->AIEndCrouch();
+}
+
