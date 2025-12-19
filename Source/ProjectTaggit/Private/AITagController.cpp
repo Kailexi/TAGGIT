@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "AITagController.h"
 #include "AITagCharacter.h"
 #include "ProjectTaggit/InputPlayer/InputCharacter.h"
