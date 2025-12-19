@@ -11,7 +11,6 @@ void AAITagCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// AI starts as tagger
 	bIsTagger = true;
 	UE_LOG(LogTemp, Warning, TEXT("AI started as TAGGER"));
 
@@ -42,6 +41,15 @@ void AAITagCharacter::Tick(float DeltaTime)
 			CachedPlayer = Cast<AInputCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
 		}
 	}
+
+	if (bIsChargingLeapAI)
+	{
+		LeapChargeTimer += DeltaTime;
+		if (LeapChargeTimer >= TargetLeapChargeTime)
+		{
+			AIReleaseLeap();
+		}
+	}
 }
 
 void AAITagCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -52,7 +60,6 @@ void AAITagCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 void AAITagCharacter::AIMoveToward(FVector TargetLocation)
 {
 	FVector Direction = (TargetLocation - GetActorLocation()).GetSafeNormal();
-
 
 	AddMovementInput(Direction, 1.0f);
 }
@@ -66,21 +73,19 @@ void AAITagCharacter::AIPerformTagDash(FVector Direction)
 		return;
 	}
 
-	if (!StaminaComponent || !StaminaComponent->CanPerformAction(TagDashStaminaCost))
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina || !Stamina->CanPerformAction(TagDashStaminaCost))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AI cannot dash: Insufficient stamina"));
 		return;
 	}
 
-	// Consume stamina
-	StaminaComponent->TryConsumeStamina(TagDashStaminaCost);
+	Stamina->TryConsumeStamina(TagDashStaminaCost);
 
-	// Set up dash
 	bIsDashing = true;
 	TagDashTimeRemaining = TagDashDuration;
 	TagDashDirection = Direction.GetSafeNormal();
 
-	// Force end sprint/crouch/slide
 	if (bIsSprinting) EndSprint();
 	if (bIsSliding) EndSlide();
 	if (bIsCrouching)
@@ -134,10 +139,142 @@ AInputCharacter* AAITagCharacter::GetPlayerCharacter() const
 
 bool AAITagCharacter::CanUseDash() const
 {
+	UStaminaComponent* Stamina = GetStaminaComponent();
 	return bIsTagger &&
 		!bIsStunned &&
 		!bIsDashing &&
 		TagCooldownRemaining <= 0.0f &&
-		StaminaComponent &&
-		StaminaComponent->CanPerformAction(TagDashStaminaCost);
+		Stamina &&
+		Stamina->CanPerformAction(TagDashStaminaCost);
+}
+
+
+void AAITagCharacter::AIStartLeap(float ChargeTime)
+{
+	if (bIsStunned || bIsJumping || bIsMantling || !CanJump()) return;
+
+	bIsChargingLeapAI = true;
+	LeapChargeTimer = 0.0f;
+	TargetLeapChargeTime = FMath::Clamp(ChargeTime, 0.1f, 1.0f);
+
+	StartJumpCharge();
+
+	UE_LOG(LogTemp, Log, TEXT("AI started charging leap (target: %.2fs)"), TargetLeapChargeTime);
+}
+
+void AAITagCharacter::AIReleaseLeap()
+{
+	if (!bIsChargingLeapAI && !bIsChargingLeap) return;
+
+	bIsChargingLeapAI = false;
+
+	ReleaseJump();
+
+	UE_LOG(LogTemp, Log, TEXT("AI released leap (charged: %.2fs)"), LeapChargeTime);
+}
+
+void AAITagCharacter::AIStartSlide()
+{
+	if (!bIsSprinting || bIsStunned || bIsSliding || bIsJumping || bIsMantling) return;
+	if (!GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f) return;
+
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina || !Stamina->CanPerformAction(SlideStaminaCost))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AI cannot slide: Insufficient stamina"));
+		return;
+	}
+
+	StartSlide();
+
+	UE_LOG(LogTemp, Log, TEXT("AI started sliding"));
+}
+
+void AAITagCharacter::AIEndSlide()
+{
+	if (!bIsSliding) return;
+
+	EndSlide();
+
+	UE_LOG(LogTemp, Log, TEXT("AI ended sliding"));
+}
+
+void AAITagCharacter::AITryMantle()
+{
+	if (bIsMantling || bIsSliding || bIsStunned || MantleCooldownRemaining > 0.0f) return;
+
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina || !Stamina->CanPerformAction(MantleStaminaCost))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AI cannot mantle: Insufficient stamina"));
+		return;
+	}
+
+	FVector Start = GetActorLocation();
+	FVector Forward = GetActorForwardVector();
+	FVector End = Start + (Forward * 100.0f);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	if (bHit)
+	{
+		TryMantle();
+		UE_LOG(LogTemp, Log, TEXT("AI attempting mantle"));
+	}
+}
+
+void AAITagCharacter::AIStartCrouch()
+{
+	if (bIsCrouching || bIsStunned || bIsDashing) return;
+
+	if (CanCrouch())
+	{
+		Crouch();
+		bIsCrouching = true;
+		UE_LOG(LogTemp, VeryVerbose, TEXT("AI started crouching"));
+	}
+}
+
+void AAITagCharacter::AIEndCrouch()
+{
+	if (!bIsCrouching) return;
+
+	UnCrouch();
+	bIsCrouching = false;
+	UE_LOG(LogTemp, VeryVerbose, TEXT("AI stopped crouching"));
+}
+
+
+float AAITagCharacter::GetCurrentStamina() const
+{
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina) return 0.0f;
+	return Stamina->GetCurrentStamina();
+}
+
+float AAITagCharacter::GetStaminaPercentage() const
+{
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina) return 0.0f;
+	float Current = Stamina->GetCurrentStamina();
+	float Max = Stamina->GetMaxStamina();
+	if (Max <= 0.0f) return 0.0f;
+	return Current / Max;
+}
+
+bool AAITagCharacter::HasStaminaFor(float Cost) const
+{
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina) return false;
+	return Stamina->CanPerformAction(Cost);
 }

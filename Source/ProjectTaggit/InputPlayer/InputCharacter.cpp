@@ -69,8 +69,15 @@ AInputCharacter::AInputCharacter()
 void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	bIsTagger = false;
 
-	TagCooldownRemaining = 0.5f;
+	if (bIsTagger) {
+		UE_LOG(LogTemp, Warning, TEXT("Player started as TAGGER"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Player started as HIDER"));
+	};
 
 	// Force-initialize tag dash values if they're invalid
 	if (TagDashDuration <= 0.0f)
@@ -132,17 +139,18 @@ void AInputCharacter::Tick(float DeltaTime)
 		if (StunGracePeriodRemaining > 0.0f)
 		{
 			StunGracePeriodRemaining -= DeltaTime;
-			
+			// During grace period, gradually slow down instead of instant freeze
 			GetCharacterMovement()->MaxWalkSpeed = TagDashSpeed * (StunGracePeriodRemaining / TagStunGracePeriod);
 		}
 		else
 		{
-			
+			// Grace period over - fully freeze movement
 			GetCharacterMovement()->MaxWalkSpeed = 0.0f;
 			GetCharacterMovement()->MaxWalkSpeedCrouched = 0.0f;
 			GetCharacterMovement()->Velocity = FVector::ZeroVector;
 		}
 
+		// Debug display
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor::Red,
@@ -155,6 +163,7 @@ void AInputCharacter::Tick(float DeltaTime)
 			StunGracePeriodRemaining = 0.0f;
 			UE_LOG(LogTemp, Log, TEXT("Stun ended - restoring movement"));
 
+			// Restore movement speed
 			if (bIsSprinting)
 				GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 			else
@@ -379,11 +388,11 @@ void AInputCharacter::ReleaseJump()
 			LeapChargeTime = 0.0f;
 		}
 
-		if (CanJump() && StaminaComponent->CanPerformAction(JumpStaminaCost))
+		if (CanJump())
 		{
-			StaminaComponent->TryConsumeStamina(JumpStaminaCost);
 			bIsJumping = true;
 			Super::Jump();
+			UE_LOG(LogTemp, VeryVerbose, TEXT("Normal jump (no stamina cost)"));
 		}
 		return;
 	}
@@ -396,12 +405,13 @@ void AInputCharacter::ReleaseJump()
 		? FMath::Clamp((LeapChargeTime - LeapMinChargeTime) / (LeapMaxChargeTime - LeapMinChargeTime), 0.0f, 1.0f)
 		: 0.0f;
 
-	const float TotalStamina = JumpStaminaCost + (bIsLeap ? LeapExtraStaminaCost * ChargeFraction : 0.0f);
+	const float TotalStamina = LeapExtraStaminaCost * ChargeFraction;  // Only leap costs stamina
 
 	if (!StaminaComponent->CanPerformAction(TotalStamina))
 	{
 		bIsJumping = false;
 		LeapChargeTime = 0.0f;
+		UE_LOG(LogTemp, Warning, TEXT("Leap failed: Insufficient stamina"));
 		return;
 	}
 
@@ -420,6 +430,7 @@ void AInputCharacter::ReleaseJump()
 	{
 		const FVector ForwardBoost = GetActorForwardVector() * (LeapForwardBoost * ChargeFraction);
 		MoveComp->Velocity += ForwardBoost;
+		UE_LOG(LogTemp, Log, TEXT("Leap! Charge: %.2f%%, Stamina: %.0f"), ChargeFraction * 100.0f, TotalStamina);
 	}
 
 	MoveComp->JumpZVelocity = OriginalJumpZ;
@@ -797,9 +808,9 @@ void AInputCharacter::TryTag()
 				OnBecameHider();
 				EndDash(true);  // Pass true to indicate successful tag
 
-				// Apply stun to the NEW tagger (brief grace period)
+
 				OtherPlayer->bIsStunned = true;
-				OtherPlayer->StunTimeRemaining = TagStunDuration;
+				OtherPlayer->StunTimeRemaining = TaggedStunDuration;
 				OtherPlayer->StunGracePeriodRemaining = TagStunGracePeriod;
 
 				break;  // Only tag one player at a time
@@ -851,8 +862,8 @@ void AInputCharacter::EndDash(bool bTagSuccessful)
 	if (!bTagSuccessful && bIsTagger)
 	{
 		bIsStunned = true;
-		StunTimeRemaining = TagStunDuration;
-		StunGracePeriodRemaining = TagStunGracePeriod;
+		StunTimeRemaining = TagStunDuration;  
+		StunGracePeriodRemaining = TagStunGracePeriod;  
 		bTagFailedThisDash = true;
 
 		UE_LOG(LogTemp, Warning, TEXT("Tag FAILED - Applying stun penalty (%.2fs) with grace period (%.2fs)"),
