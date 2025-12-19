@@ -51,6 +51,13 @@ void AAITagController::Tick(float DeltaTime)
 		return;
 	}
 
+	ObservationUpdateTimer += DeltaTime;
+	if (ObservationUpdateTimer >= ObservationUpdateInterval)
+	{
+		ObservationUpdateTimer = 0.0f;
+		UpdateObservations(DeltaTime);
+	}
+
 	BehaviorUpdateTimer += DeltaTime;
 	if (BehaviorUpdateTimer >= BehaviorUpdateInterval)
 	{
@@ -63,7 +70,7 @@ void AAITagController::Tick(float DeltaTime)
 	{
 		AbilityCheckTimer = 0.0f;
 		float DistanceToPlayer = GetDistanceToPlayer();
-		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();  // AI chases when player is NOT tagger
+		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();  
 
 		UE_LOG(LogTemp, VeryVerbose, TEXT("Ability Check: Difficulty=%d, Stamina=%.1f%%, Chasing=%d"),
 			static_cast<int32>(ControlledAI->Difficulty),
@@ -120,7 +127,7 @@ void AAITagController::UpdateBehavior(float DeltaTime)
 	}
 
 
-	if (bPlayerIsTagger)  // Changed from bAIIsTagger
+	if (bPlayerIsTagger)
 	{
 		UE_LOG(LogTemp, Warning, TEXT(">>> AI FLEEING (Player is tagger, Dist=%.1fm)"), DistanceToPlayer / 100.0f);
 		RunAway(DistanceToPlayer);
@@ -149,12 +156,12 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 	{
 	case EAIDifficulty::Easy:
 		ChaseRadius = 6000.0f;   // 60m 
-		SprintRadius = 3200.0f;  // 32m 
+		SprintRadius = 3200.0f;  // 32m
 		DashRadius = 300.0f;     // 3m
 		break;
 	case EAIDifficulty::Medium:
 		ChaseRadius = 8000.0f;   // 80m 
-		SprintRadius = 4000.0f;  // 40m 
+		SprintRadius = 4000.0f;  // 40m
 		DashRadius = 400.0f;     // 4m
 		break;
 	case EAIDifficulty::Hard:
@@ -507,7 +514,6 @@ void AAITagController::TryMantle()
 {
 	if (!ControlledAI) return;
 
-	// Check cooldown
 	float Cooldown = ControlledAI->GetMantleCooldown();
 	if (Cooldown > 0.0f)
 	{
@@ -515,7 +521,6 @@ void AAITagController::TryMantle()
 		return;
 	}
 
-	// Check stamina
 	float MantleCost = ControlledAI->GetMantleCost();
 	if (!ControlledAI->HasStaminaFor(MantleCost))
 	{
@@ -523,7 +528,6 @@ void AAITagController::TryMantle()
 		return;
 	}
 
-	// Try mantle
 	ControlledAI->AITryMantle();
 
 	UE_LOG(LogTemp, VeryVerbose, TEXT("AI attempting mantle"));
@@ -561,15 +565,16 @@ float AAITagController::GetStaminaReserve() const
 	switch (ControlledAI->Difficulty)
 	{
 	case EAIDifficulty::Easy:
-		return 0.15f;
+		return 0.15f;  
 	case EAIDifficulty::Medium:
-		return 0.10f;
+		return 0.10f;  
 	case EAIDifficulty::Hard:
-		return 0.05f;
+		return 0.05f;  
 	default:
 		return 0.10f;
 	}
 }
+
 
 FVector AAITagController::PredictPlayerPosition(float TimeAhead) const
 {
@@ -595,9 +600,186 @@ FVector AAITagController::GetPredictedDirection() const
 	return Direction.GetSafeNormal();
 }
 
+
 float AAITagController::GetHeightDifference() const
 {
 	if (!ControlledAI || !TargetPlayer) return 0.0f;
 
 	return TargetPlayer->GetActorLocation().Z - ControlledAI->GetActorLocation().Z;
+}
+
+
+void AAITagController::UpdateObservations(float DeltaTime)
+{
+	if (!ControlledAI || !TargetPlayer) return;
+
+	UpdatePlayerTracking();
+
+	UpdateEnvironmentalSensors();
+
+	UCharacterMovementComponent* MovementComp = ControlledAI->GetCharacterMovement();
+	if (MovementComp)
+	{
+		CurrentObservation.AIPosition = ControlledAI->GetActorLocation();
+		CurrentObservation.AIVelocity = MovementComp->Velocity;
+		CurrentObservation.AISpeed = MovementComp->Velocity.Size();
+	}
+
+	CurrentObservation.StaminaPercent = ControlledAI->GetStaminaPercentage();
+	CurrentObservation.bAIIsTagger = ControlledAI->IsTagger();
+
+	CurrentObservation.DistanceToPlayer = GetDistanceToPlayer();
+	CurrentObservation.HeightDifference = GetHeightDifference();
+	CurrentObservation.DirectionToPlayer = GetDirectionToPlayer();
+	CurrentObservation.bPlayerVisible = IsPlayerVisible();
+
+	UE_LOG(LogTemp, VeryVerbose, TEXT("Observation: PlayerSpeed=%.1f, ObstacleAhead=%d, EdgeAhead=%d, Dist=%.1fm"),
+		CurrentObservation.PlayerSpeed,
+		CurrentObservation.bObstacleAhead,
+		CurrentObservation.bEdgeAhead,
+		CurrentObservation.DistanceToPlayer / 100.0f);
+}
+
+void AAITagController::UpdatePlayerTracking()
+{
+	if (!TargetPlayer) return;
+
+	FVector CurrentPlayerPos = TargetPlayer->GetActorLocation();
+	CurrentObservation.PlayerPosition = CurrentPlayerPos;
+
+	if (!PreviousPlayerPosition.IsZero())
+	{
+		FVector PositionDelta = CurrentPlayerPos - PreviousPlayerPosition;
+		CurrentObservation.PlayerVelocity = PositionDelta / ObservationUpdateInterval;
+		CurrentObservation.PlayerSpeed = CurrentObservation.PlayerVelocity.Size();
+
+		// fuck deletion by zero
+		if (CurrentObservation.PlayerSpeed > 1.0f)
+		{
+			CurrentObservation.PlayerDirection = CurrentObservation.PlayerVelocity.GetSafeNormal();
+		}
+		else
+		{
+			CurrentObservation.PlayerDirection = FVector::ZeroVector;
+		}
+	}
+
+	PreviousPlayerPosition = CurrentPlayerPos;
+
+	CurrentObservation.bPlayerIsTagger = TargetPlayer->IsTagger();
+	CurrentObservation.bPlayerIsSprinting = TargetPlayer->IsSprinting();
+}
+
+void AAITagController::UpdateEnvironmentalSensors()
+{
+	if (!ControlledAI) return;
+
+	UCharacterMovementComponent* MovementComp = ControlledAI->GetCharacterMovement();
+	if (!MovementComp) return;
+
+	FVector MovementDirection = MovementComp->Velocity.GetSafeNormal();
+	if (MovementDirection.IsNearlyZero())
+	{
+		MovementDirection = ControlledAI->GetActorForwardVector();
+	}
+
+	//obstacles are a construct divert to reality
+	CurrentObservation.bObstacleAhead = DetectObstacle(MovementDirection, SensorRange);
+	CurrentObservation.bObstacleLeft = DetectObstacle(MovementDirection.RotateAngleAxis(-90.0f, FVector::UpVector), SensorRange);
+	CurrentObservation.bObstacleRight = DetectObstacle(MovementDirection.RotateAngleAxis(90.0f, FVector::UpVector), SensorRange);
+
+	CurrentObservation.bEdgeAhead = DetectEdge(MovementDirection, EdgeDetectionRange);
+
+	if (CurrentObservation.bObstacleAhead)
+	{
+		FHitResult HitResult;
+		FVector Start = ControlledAI->GetActorLocation();
+		FVector End = Start + (MovementDirection * SensorRange);
+
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(ControlledAI);
+		QueryParams.AddIgnoredActor(TargetPlayer);
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
+		{
+			CurrentObservation.ObstacleDistance = HitResult.Distance;
+		}
+		else
+		{
+			CurrentObservation.ObstacleDistance = SensorRange;
+		}
+	}
+	else
+	{
+		CurrentObservation.ObstacleDistance = SensorRange;
+	}
+
+	CurrentObservation.bCoverNearby = false;
+}
+
+bool AAITagController::DetectObstacle(const FVector& Direction, float Range) const
+{
+	if (!ControlledAI || !GetWorld()) return false;
+
+	FVector Start = ControlledAI->GetActorLocation();
+	FVector End = Start + (Direction * Range);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(ControlledAI);
+	QueryParams.AddIgnoredActor(TargetPlayer);
+
+	// I HECKING LOVE RAYCASTING
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	// Draw debug line ONLY IN EDITOR YOU WILL NOT SEE IT IF YOU PACK THE GAME DON'T KILL ME FOR THAT
+#if WITH_EDITOR
+	if (bHit)
+	{
+		DrawDebugLine(GetWorld(), Start, HitResult.Location, FColor::Red, false, 0.1f, 0, 2.0f);
+	}
+	else
+	{
+		DrawDebugLine(GetWorld(), Start, End, FColor::Green, false, 0.1f, 0, 1.0f);
+	}
+#endif
+
+	return bHit;
+}
+
+bool AAITagController::DetectEdge(const FVector& Direction, float Range) const
+{
+	if (!ControlledAI || !GetWorld()) return false;
+
+	FVector Start = ControlledAI->GetActorLocation() + (Direction * 100.0f);
+	FVector End = Start + (FVector::DownVector * 500.0f);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(ControlledAI);
+
+	bool bHitGround = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	bool bEdgeDetected = !bHitGround;
+
+#if WITH_EDITOR
+	if (bEdgeDetected)
+	{
+		DrawDebugLine(GetWorld(), Start, End, FColor::Orange, false, 0.1f, 0, 3.0f);
+	}
+#endif
+
+	return bEdgeDetected;
 }
