@@ -9,8 +9,7 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
-				"Engine",
-				"LearningAgents"
+				"Engine"
 			]
 		}
 	],
@@ -28,15 +27,7 @@
 			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/362651520df94e4fa65492dbcba44ae2"
 		},
 		{
-			"Name": "LearningAgents",
-			"Enabled": true
-		},
-		{
-			"Name": "MLAdapter",
-			"Enabled": true
-		},
-		{
-			"Name": "MLDeformerFramework",
+			"Name": "Landmass",
 			"Enabled": true
 		}
 	]
