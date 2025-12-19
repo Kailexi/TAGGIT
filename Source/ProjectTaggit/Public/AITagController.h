@@ -2,7 +2,6 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "AITagController.generated.h"
-
 USTRUCT(BlueprintType)
 struct FAIObservation
 {
@@ -19,7 +18,7 @@ struct FAIObservation
 	float PlayerSpeed = 0.0f;  // Magnitude of velocity
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Player")
-	FVector PlayerDirection = FVector::ZeroVector;
+	FVector PlayerDirection = FVector::ZeroVector;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Player")
 	bool bPlayerIsTagger = false;
@@ -48,7 +47,7 @@ struct FAIObservation
 	float DistanceToPlayer = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
-	float HeightDifference = 0.0f; 
+	float HeightDifference = 0.0f;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
 	FVector DirectionToPlayer = FVector::ZeroVector;
@@ -57,7 +56,7 @@ struct FAIObservation
 	bool bPlayerVisible = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
-	bool bObstacleAhead = false;  
+	bool bObstacleAhead = false; 
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
 	bool bObstacleLeft = false;
@@ -74,6 +73,7 @@ struct FAIObservation
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
 	bool bCoverNearby = false;  
 };
+
 
 UCLASS()
 class PROJECTTAGGIT_API AAITagController : public AAIController
@@ -98,15 +98,14 @@ private:
 
 	// Behavior timers
 	float UpdateTargetTimer = 0.0f;
-	float UpdateTargetInterval = 0.5f;
+	float UpdateTargetInterval = 0.5f;  
 
 	float BehaviorUpdateTimer = 0.0f;
 	float BehaviorUpdateInterval = 0.1f;
 
 	float AbilityCheckTimer = 0.0f;
-	float AbilityCheckInterval = 0.3f;
+	float AbilityCheckInterval = 0.3f;  
 
-	// Observation system
 	FAIObservation CurrentObservation;
 	FVector PreviousPlayerPosition = FVector::ZeroVector;
 	float ObservationUpdateTimer = 0.0f;
@@ -115,15 +114,26 @@ private:
 	float SensorRange = 500.0f;  
 	float EdgeDetectionRange = 300.0f;  
 
+	//Phase 3D difficulty refinement
 	float ReactionDelayTimer = 0.0f;
 	float LastDecisionTime = 0.0f;
 	FVector CachedDecisionDirection = FVector::ZeroVector;
 	bool bShouldMakeMistake = false;
 
+	//Unstuck system
 	FVector LastPosition = FVector::ZeroVector;
 	float StuckTimer = 0.0f;
 	float UnstuckCooldown = 0.0f;
 
+	//Nav-Mesh
+	bool bUseNavMesh = true;
+	FVector CurrentPathTarget = FVector::ZeroVector;
+	TArray<FVector> PatrolPoints;
+	int32 CurrentPatrolIndex = 0;
+	float PatrolWaitTimer = 0.0f;
+	bool bIsPatrolling = false;
+
+	// AI Logic Functions
 	void UpdateTarget();
 	void UpdateBehavior(float DeltaTime);
 	void ChasePlayer(float DistanceToPlayer);
@@ -160,7 +170,13 @@ private:
 	bool IsStuck(float DeltaTime);
 	FVector GetUnstuckDirection();
 
-	// Phase 2: Advanced AI behaviors
+	void MoveToLocationWithNav(const FVector& TargetLocation);
+	void UpdatePatrol(float DeltaTime);
+	FVector GetNextPatrolPoint();
+	void InitializePatrolPoints();
+	bool HasReachedDestination() const;
+	void StopAndResetNavMesh();
+
 	void CheckAdvancedAbilities(float DistanceToPlayer, bool bIsChasing);
 	void TryLeap(const FVector& TargetDirection);
 	void TrySlide();

@@ -1,14 +1,18 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
 #include "AITagController.h"
 #include "AITagCharacter.h"
 #include "ProjectTaggit/InputPlayer/InputCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
+#include "NavigationSystem.h"
+#include "Navigation/PathFollowingComponent.h"
 
 AAITagController::AAITagController()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 0.0f;
+	PrimaryActorTick.TickInterval = 0.0f; 
 }
 
 void AAITagController::BeginPlay()
@@ -27,6 +31,8 @@ void AAITagController::OnPossess(APawn* InPawn)
 		UE_LOG(LogTemp, Warning, TEXT("AITagController possessed: %s (Difficulty: %d)"),
 			*ControlledAI->GetName(),
 			static_cast<int32>(ControlledAI->Difficulty));
+
+		InitializePatrolPoints();
 
 		UpdateTarget();
 	}
@@ -70,7 +76,7 @@ void AAITagController::Tick(float DeltaTime)
 	{
 		AbilityCheckTimer = 0.0f;
 		float DistanceToPlayer = GetDistanceToPlayer();
-		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();
+		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();  
 
 		UE_LOG(LogTemp, VeryVerbose, TEXT("Ability Check: Difficulty=%d, Stamina=%.1f%%, Chasing=%d"),
 			static_cast<int32>(ControlledAI->Difficulty),
@@ -122,12 +128,13 @@ void AAITagController::UpdateBehavior(float DeltaTime)
 
 	if (bAIStunned)
 	{
+		StopAndResetNavMesh();
 		UE_LOG(LogTemp, Warning, TEXT(">>> AI is STUNNED, skipping behavior"));
 		return;
 	}
 
 
-	if (bPlayerIsTagger)
+	if (bPlayerIsTagger)  
 	{
 		UE_LOG(LogTemp, Warning, TEXT(">>> AI FLEEING (Player is tagger, Dist=%.1fm)"), DistanceToPlayer / 100.0f);
 		RunAway(DistanceToPlayer);
@@ -208,17 +215,25 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		break;
 	}
 
-	// Too far - patrol/idle
+	//Patrol states
 	if (DistanceToPlayer > ChaseRadius)
 	{
 		ControlledAI->AIEndSprint();
-		StopMovement();
+
+		if (bUseNavMesh && !bIsPatrolling)
+		{
+			UpdatePatrol(GetWorld()->GetDeltaSeconds());
+		}
+		else if (!bUseNavMesh)
+		{
+			StopMovement();
+		}
 
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(
 				3, 0.0f, FColor::Orange,
-				TEXT("AI IDLE - Player too far")
+				FString::Printf(TEXT("AI PATROLLING - Player too far (%.0fm)"), DistanceToPlayer / 100.0f)
 			);
 		}
 		return;
@@ -257,6 +272,14 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		FRotator CurrentRotation = ControlledAI->GetActorRotation();
 		FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, GetWorld()->GetDeltaSeconds(), 10.0f);
 		ControlledAI->SetActorRotation(NewRotation);
+	}
+
+	//Navmesh woohooo
+	if (bUseNavMesh)
+	{
+		FVector TargetLocation = TargetPlayer->GetActorLocation();
+		MoveToActor(TargetPlayer, 100.0f, true, true, false, nullptr, true);
+		return;
 	}
 
 	if (bIsOnGround)
@@ -393,6 +416,14 @@ void AAITagController::RunAway(float DistanceToPlayer)
 		FRotator CurrentRotation = ControlledAI->GetActorRotation();
 		FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, GetWorld()->GetDeltaSeconds(), 10.0f);
 		ControlledAI->SetActorRotation(NewRotation);
+	}
+
+	//use NavMesh pathfinding when available if it breaks i will kms
+	if (bUseNavMesh)
+	{
+		FVector FleeTarget = ControlledAI->GetActorLocation() + (DirectionAwayFromPlayer * 2000.0f);
+		MoveToLocationWithNav(FleeTarget);
+		return;
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("    RunAway: Sprint=%d, Crouch=%d, Slide=%d, OnGround=%d, Vel=(%.0f,%.0f,%.0f)"),
@@ -564,15 +595,14 @@ void AAITagController::CheckAdvancedAbilities(float DistanceToPlayer, bool bIsCh
 		}
 	}
 
-
 	if (!bIsChasing && DistanceToPlayer > 3000.0f && DistanceToPlayer < 5000.0f)
 	{
-		ManageCrouch(true);  
+		ManageCrouch(true);
 		UE_LOG(LogTemp, VeryVerbose, TEXT("AI crouching at medium-far range (%.1fm)"), DistanceToPlayer / 100.0f);
 	}
 	else
 	{
-		ManageCrouch(false);  
+		ManageCrouch(false);
 	}
 }
 
@@ -603,7 +633,7 @@ void AAITagController::TryLeap(const FVector& TargetDirection)
 		return;
 	}
 
-	ControlledAI->AIStartLeap(0.5f); 
+	ControlledAI->AIStartLeap(0.5f);
 
 	UE_LOG(LogTemp, Warning, TEXT("AI LEAPING! Stamina: %.1f%%"),
 		ControlledAI->GetStaminaPercentage() * 100.0f);
@@ -1024,7 +1054,7 @@ FVector AAITagController::GetTacticalPosition(bool bIsChasing, float DistanceToP
 
 		if (PlayerSpeed > 100.0f)  
 		{
-			float TimeToIntercept = DistanceToPlayer / 1000.0f; 
+			float TimeToIntercept = DistanceToPlayer / 1000.0f;  
 			FVector PredictedPos = PlayerPos + (PlayerVelocity * TimeToIntercept);
 
 			UE_LOG(LogTemp, VeryVerbose, TEXT("Tactical Chase: Intercepting predicted position"));
@@ -1039,7 +1069,7 @@ FVector AAITagController::GetTacticalPosition(bool bIsChasing, float DistanceToP
 	{
 		FVector CoverPos = FindCoverPosition();
 
-		if (!CoverPos.IsZero() && DistanceToPlayer < 2000.0f)  
+		if (!CoverPos.IsZero() && DistanceToPlayer < 2000.0f)
 		{
 			UE_LOG(LogTemp, Log, TEXT("Tactical Flee: Moving to cover"));
 			return CoverPos;
@@ -1304,10 +1334,105 @@ FVector AAITagController::GetUnstuckDirection()
 	UnstuckCooldown = 2.0f;
 	StuckTimer = 0.0f;
 
+	//Reset NavMesh to clear bad paths
+	StopAndResetNavMesh();
+
 	FVector ToPlayer = GetDirectionToPlayer();
 	float RandomAngle = FMath::RandRange(60.0f, 120.0f) * (FMath::RandBool() ? 1.0f : -1.0f);
 	FVector UnstuckDir = ToPlayer.RotateAngleAxis(RandomAngle, FVector::UpVector);
 
 	UE_LOG(LogTemp, Warning, TEXT("Unstuck: Turning %.1f degrees"), RandomAngle);
 	return UnstuckDir.GetSafeNormal();
+}
+
+ // NavMesh pathfinding
+void AAITagController::InitializePatrolPoints()
+{
+	if (!ControlledAI) return;
+
+	FVector AILocation = ControlledAI->GetActorLocation();
+	float PatrolRadius = ControlledAI->PatrolRadius * 3.0f;
+
+	PatrolPoints.Empty();
+	PatrolPoints.Add(AILocation + FVector(PatrolRadius, PatrolRadius, 0));
+	PatrolPoints.Add(AILocation + FVector(PatrolRadius, -PatrolRadius, 0));
+	PatrolPoints.Add(AILocation + FVector(-PatrolRadius, -PatrolRadius, 0));
+	PatrolPoints.Add(AILocation + FVector(-PatrolRadius, PatrolRadius, 0));
+
+	CurrentPatrolIndex = 0;
+	UE_LOG(LogTemp, Log, TEXT("Initialized %d patrol points with radius %.0f"), PatrolPoints.Num(), PatrolRadius);
+}
+
+void AAITagController::MoveToLocationWithNav(const FVector& TargetLocation)
+{
+	if (!ControlledAI) return;
+
+	CurrentPathTarget = TargetLocation;
+	bIsPatrolling = false;
+
+	EPathFollowingRequestResult::Type Result = MoveToLocation(TargetLocation, 100.0f, true, true, false, true);
+
+	if (Result == EPathFollowingRequestResult::Failed)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NavMesh pathfinding failed, using direct movement"));
+		bUseNavMesh = false;
+	}
+}
+
+bool AAITagController::HasReachedDestination() const
+{
+	if (!ControlledAI) return true;
+
+	UPathFollowingComponent* PathComp = GetPathFollowingComponent();
+	if (PathComp)
+	{
+		return PathComp->GetStatus() == EPathFollowingStatus::Idle;
+	}
+
+	return true;
+}
+
+void AAITagController::UpdatePatrol(float DeltaTime)
+{
+	if (!ControlledAI || PatrolPoints.Num() == 0) return;
+
+	if (PatrolWaitTimer > 0.0f)
+	{
+		PatrolWaitTimer -= DeltaTime;
+		return;
+	}
+
+	if (HasReachedDestination())
+	{
+		FVector NextPoint = GetNextPatrolPoint();
+		MoveToLocationWithNav(NextPoint);
+		PatrolWaitTimer = 2.0f;
+		bIsPatrolling = true;
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Patrolling to point %d"), CurrentPatrolIndex);
+	}
+}
+
+FVector AAITagController::GetNextPatrolPoint()
+{
+	if (PatrolPoints.Num() == 0) return FVector::ZeroVector;
+
+	CurrentPatrolIndex = (CurrentPatrolIndex + 1) % PatrolPoints.Num();
+	return PatrolPoints[CurrentPatrolIndex];
+}
+
+void AAITagController::StopAndResetNavMesh()
+{
+	StopMovement();
+
+	UPathFollowingComponent* PathComp = GetPathFollowingComponent();
+	if (PathComp)
+	{
+		PathComp->AbortMove(*this, FPathFollowingResultFlags::ForcedScript);
+	}
+
+	CurrentPathTarget = FVector::ZeroVector;
+	bIsPatrolling = false;
+	bUseNavMesh = true;
+
+	UE_LOG(LogTemp, Warning, TEXT("NavMesh reset - cleared pathfinding state"));
 }
