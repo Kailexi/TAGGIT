@@ -38,7 +38,7 @@ struct FAIObservation
 	float AISpeed = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Self")
-	float StaminaPercent = 0.0f;
+	float StaminaPercent = 0.0f;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Self")
 	bool bAIIsTagger = false;
@@ -48,7 +48,7 @@ struct FAIObservation
 	float DistanceToPlayer = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
-	float HeightDifference = 0.0f;
+	float HeightDifference = 0.0f; 
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
 	FVector DirectionToPlayer = FVector::ZeroVector;
@@ -56,9 +56,8 @@ struct FAIObservation
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Spatial")
 	bool bPlayerVisible = false;
 
-	// Environmental sensors 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
-	bool bObstacleAhead = false;
+	bool bObstacleAhead = false;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
 	bool bObstacleLeft = false;
@@ -73,7 +72,7 @@ struct FAIObservation
 	float ObstacleDistance = 0.0f;  
 
 	UPROPERTY(BlueprintReadOnly, Category = "Observation|Environment")
-	bool bCoverNearby = false; 
+	bool bCoverNearby = false;  
 };
 
 UCLASS()
@@ -99,13 +98,13 @@ private:
 
 	// Behavior timers
 	float UpdateTargetTimer = 0.0f;
-	float UpdateTargetInterval = 0.5f;  
+	float UpdateTargetInterval = 0.5f;
 
 	float BehaviorUpdateTimer = 0.0f;
-	float BehaviorUpdateInterval = 0.1f;  
+	float BehaviorUpdateInterval = 0.1f;
 
 	float AbilityCheckTimer = 0.0f;
-	float AbilityCheckInterval = 0.3f;  
+	float AbilityCheckInterval = 0.3f;
 
 	// Observation system
 	FAIObservation CurrentObservation;
@@ -113,11 +112,18 @@ private:
 	float ObservationUpdateTimer = 0.0f;
 	float ObservationUpdateInterval = 0.1f;  // Update observations every 0.1s
 
-	// Environmental sensors
 	float SensorRange = 500.0f;  
 	float EdgeDetectionRange = 300.0f;  
 
-	// AI Logic Functions
+	float ReactionDelayTimer = 0.0f;
+	float LastDecisionTime = 0.0f;
+	FVector CachedDecisionDirection = FVector::ZeroVector;
+	bool bShouldMakeMistake = false;
+
+	FVector LastPosition = FVector::ZeroVector;
+	float StuckTimer = 0.0f;
+	float UnstuckCooldown = 0.0f;
+
 	void UpdateTarget();
 	void UpdateBehavior(float DeltaTime);
 	void ChasePlayer(float DistanceToPlayer);
@@ -136,6 +142,25 @@ private:
 	bool ShouldAvoidEdge(const FVector& MovementDirection);
 	FVector FindCoverPosition();
 	FVector GetTacticalPosition(bool bIsChasing, float DistanceToPlayer);
+
+	//Evasion
+	bool ShouldJumpObstacle();
+	bool ShouldUseSlideForObstacle();
+	bool ShouldBreakLineOfSight();
+	FVector GetEnhancedZigzagDirection(const FVector& BaseDirection, float DistanceToPlayer);
+
+	//Difficulty scales
+	float GetReactionDelay() const;
+	float GetMistakeChance() const;
+	bool ShouldDelayDecision(float DeltaTime);
+	FVector ApplyMistakeToDirection(const FVector& Direction);
+	float GetDifficultyStaminaReserve() const;
+
+	//Unstuck system
+	bool IsStuck(float DeltaTime);
+	FVector GetUnstuckDirection();
+
+	// Phase 2: Advanced AI behaviors
 	void CheckAdvancedAbilities(float DistanceToPlayer, bool bIsChasing);
 	void TryLeap(const FVector& TargetDirection);
 	void TrySlide();
