@@ -1,6 +1,7 @@
 #include "AITagController.h"
 #include "AITagCharacter.h"
 #include "ProjectTaggit/InputPlayer/InputCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
 
@@ -62,7 +63,13 @@ void AAITagController::Tick(float DeltaTime)
 	{
 		AbilityCheckTimer = 0.0f;
 		float DistanceToPlayer = GetDistanceToPlayer();
-		bool bIsChasing = ControlledAI->IsTagger();
+		bool bIsChasing = !TargetPlayer || !TargetPlayer->IsTagger();  // AI chases when player is NOT tagger
+
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Ability Check: Difficulty=%d, Stamina=%.1f%%, Chasing=%d"),
+			static_cast<int32>(ControlledAI->Difficulty),
+			ControlledAI->GetStaminaPercentage() * 100.0f,
+			bIsChasing);
+
 		CheckAdvancedAbilities(DistanceToPlayer, bIsChasing);
 	}
 }
@@ -88,27 +95,41 @@ void AAITagController::UpdateBehavior(float DeltaTime)
 	if (!ControlledAI || !TargetPlayer) return;
 
 	float DistanceToPlayer = GetDistanceToPlayer();
+	bool bAIIsTagger = ControlledAI->IsTagger();
+	bool bPlayerIsTagger = TargetPlayer->IsTagger();
+	bool bAIStunned = ControlledAI->IsStunned();
+	float StaminaPercent = ControlledAI->GetStaminaPercentage() * 100.0f;
 
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(
 			1, 0.0f, FColor::Cyan,
-			FString::Printf(TEXT("AI: IsTagger=%d, Player IsTagger=%d, Dist=%.1fm"),
-				ControlledAI->IsTagger(),
-				TargetPlayer->IsTagger(),
-				DistanceToPlayer / 100.0f)
+			FString::Printf(TEXT("AI: Tagger=%d | Player: Tagger=%d | Dist=%.1fm | Stunned=%d | Stamina=%.0f%%"),
+				bAIIsTagger,
+				bPlayerIsTagger,
+				DistanceToPlayer / 100.0f,
+				bAIStunned,
+				StaminaPercent)
 		);
 	}
 
-	// AI is the tagger - chase player
-	if (ControlledAI->IsTagger())
+	if (bAIStunned)
 	{
-		ChasePlayer(DistanceToPlayer);
+		UE_LOG(LogTemp, Warning, TEXT(">>> AI is STUNNED, skipping behavior"));
+		return;
 	}
-	// Player is the tagger - run away
+
+
+	if (bPlayerIsTagger)  // Changed from bAIIsTagger
+	{
+		UE_LOG(LogTemp, Warning, TEXT(">>> AI FLEEING (Player is tagger, Dist=%.1fm)"), DistanceToPlayer / 100.0f);
+		RunAway(DistanceToPlayer);
+	}
+	// AI is the tagger - chase player
 	else
 	{
-		RunAway(DistanceToPlayer);
+		UE_LOG(LogTemp, Warning, TEXT(">>> AI CHASING (AI is tagger, Dist=%.1fm)"), DistanceToPlayer / 100.0f);
+		ChasePlayer(DistanceToPlayer);
 	}
 }
 
@@ -127,22 +148,23 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 	switch (ControlledAI->Difficulty)
 	{
 	case EAIDifficulty::Easy:
-		ChaseRadius = 6000.0f;   // 60m
-		SprintRadius = 3200.0f;  // 32m
+		ChaseRadius = 6000.0f;   // 60m 
+		SprintRadius = 3200.0f;  // 32m 
 		DashRadius = 300.0f;     // 3m
 		break;
 	case EAIDifficulty::Medium:
-		ChaseRadius = 8000.0f;   // 80m
-		SprintRadius = 4000.0f;  // 40m
+		ChaseRadius = 8000.0f;   // 80m 
+		SprintRadius = 4000.0f;  // 40m 
 		DashRadius = 400.0f;     // 4m
 		break;
 	case EAIDifficulty::Hard:
-		ChaseRadius = 12000.0f;  // 120m
-		SprintRadius = 6000.0f;  // 60m
+		ChaseRadius = 12000.0f;  // 120m 
+		SprintRadius = 6000.0f;  // 60m 
 		DashRadius = 500.0f;     // 5m
 		break;
 	}
 
+	// Too far - patrol/idle
 	if (DistanceToPlayer > ChaseRadius)
 	{
 		ControlledAI->AIEndSprint();
@@ -158,13 +180,16 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		return;
 	}
 
+	// Close enough to dash
 	if (DistanceToPlayer <= DashRadius && ControlledAI->CanUseDash())
 	{
 		PerformDashAttack(DirectionToPlayer);
 		return;
 	}
 
-	if (DistanceToPlayer <= SprintRadius && ControlledAI->Difficulty != EAIDifficulty::Easy)
+	// Sprint range - run toward player
+	bool bShouldSprint = (DistanceToPlayer <= SprintRadius && ControlledAI->Difficulty != EAIDifficulty::Easy);
+	if (bShouldSprint)
 	{
 		ControlledAI->AIStartSprint();
 	}
@@ -173,8 +198,43 @@ void AAITagController::ChasePlayer(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	ControlledAI->AddMovementInput(DirectionToPlayer, 1.0f);
+	// Force velocity directly - AddMovementInput doesn't work for AI
+	UCharacterMovementComponent* MovementComp = ControlledAI->GetCharacterMovement();
+	if (!MovementComp)
+	{
+		UE_LOG(LogTemp, Error, TEXT("    ChasePlayer: No movement component!"));
+		return;
+	}
 
+	bool bIsOnGround = MovementComp->IsMovingOnGround();
+	bool bIsSprinting = ControlledAI->IsSprinting();
+	FVector CurrentVelocity = MovementComp->Velocity;
+
+	// Force velocity directly when on ground (same fix as RunAway)
+	if (bIsOnGround)
+	{
+		// Calculate desired velocity based on max walk speed
+		FVector DesiredVelocity = DirectionToPlayer * MovementComp->MaxWalkSpeed;
+		// Preserve Z velocity for gravity
+		DesiredVelocity.Z = CurrentVelocity.Z;
+
+		// Apply velocity directly
+		MovementComp->Velocity = DesiredVelocity;
+
+		UE_LOG(LogTemp, VeryVerbose, TEXT("    ChasePlayer: FORCING velocity - Dir=(%.2f,%.2f,%.2f), Sprint=%d, MaxSpeed=%.0f, NewVel=(%.0f,%.0f,%.0f)"),
+			DirectionToPlayer.X, DirectionToPlayer.Y, DirectionToPlayer.Z,
+			bIsSprinting,
+			MovementComp->MaxWalkSpeed,
+			DesiredVelocity.X, DesiredVelocity.Y, DesiredVelocity.Z);
+	}
+	else
+	{
+		// Use AddMovementInput when in air (for landing direction)
+		ControlledAI->AddMovementInput(DirectionToPlayer, 1.0f);
+		UE_LOG(LogTemp, VeryVerbose, TEXT("    ChasePlayer: In air, using AddMovementInput"));
+	}
+
+	// Debug visualization
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(
@@ -191,12 +251,38 @@ void AAITagController::RunAway(float DistanceToPlayer)
 {
 	if (!ControlledAI || !TargetPlayer) return;
 
-	StopMovement();
-
+	// Run in opposite direction from player
 	FVector DirectionAwayFromPlayer = -GetDirectionToPlayer();
-	FVector TargetLocation = ControlledAI->GetActorLocation() + (DirectionAwayFromPlayer * 2000.0f);  // Run 20m away
 
-	if (DistanceToPlayer < 4000.0f)  // 40m
+	UE_LOG(LogTemp, Warning, TEXT("    RunAway: Dir=(%.2f,%.2f,%.2f), Dist=%.1fm"),
+		DirectionAwayFromPlayer.X, DirectionAwayFromPlayer.Y, DirectionAwayFromPlayer.Z,
+		DistanceToPlayer / 100.0f);
+
+	// FIX 3: Clean up ALL movement states that could block sprint
+	UCharacterMovementComponent* MovementComp = ControlledAI->GetCharacterMovement();
+	if (!MovementComp)
+	{
+		UE_LOG(LogTemp, Error, TEXT("    RunAway: No movement component!"));
+		return;
+	}
+
+	// End crouch if active
+	if (ControlledAI->IsCrouching())
+	{
+		ControlledAI->AIEndCrouch();
+		UE_LOG(LogTemp, Warning, TEXT("    RunAway: Ended crouch to allow sprint"));
+	}
+
+	// End slide if active (should auto-end but be explicit)
+	if (ControlledAI->IsSliding())
+	{
+		ControlledAI->AIEndSlide();
+		UE_LOG(LogTemp, Warning, TEXT("    RunAway: Ended slide to allow sprint"));
+	}
+
+	// Sprint away if player is close
+	bool bShouldSprint = DistanceToPlayer < 4000.0f;  // 40m
+	if (bShouldSprint)
 	{
 		ControlledAI->AIStartSprint();
 	}
@@ -205,19 +291,43 @@ void AAITagController::RunAway(float DistanceToPlayer)
 		ControlledAI->AIEndSprint();
 	}
 
-	ControlledAI->AddMovementInput(DirectionAwayFromPlayer, 1.0f);
+	bool bIsOnGround = MovementComp->IsMovingOnGround();
+	bool bIsSprinting = ControlledAI->IsSprinting();
+	bool bIsCrouched = ControlledAI->IsCrouching();
+	bool bIsSliding = ControlledAI->IsSliding();
+	FVector CurrentVelocity = MovementComp->Velocity;
+
+	UE_LOG(LogTemp, Warning, TEXT("    RunAway: Sprint=%d, Crouch=%d, Slide=%d, OnGround=%d, Vel=(%.0f,%.0f,%.0f)"),
+		bIsSprinting, bIsCrouched, bIsSliding, bIsOnGround,
+		CurrentVelocity.X, CurrentVelocity.Y, CurrentVelocity.Z);
+
+	if (bIsSprinting && bIsOnGround)
+	{
+		FVector DesiredVelocity = DirectionAwayFromPlayer * MovementComp->MaxWalkSpeed;
+		DesiredVelocity.Z = CurrentVelocity.Z;
+
+		MovementComp->Velocity = DesiredVelocity;
+
+		UE_LOG(LogTemp, Warning, TEXT("    RunAway: FORCING velocity - MaxSpeed=%.0f, NewVel=(%.0f,%.0f,%.0f)"),
+			MovementComp->MaxWalkSpeed,
+			DesiredVelocity.X, DesiredVelocity.Y, DesiredVelocity.Z);
+	}
+	else
+	{
+		ControlledAI->AddMovementInput(DirectionAwayFromPlayer, 1.0f);
+		UE_LOG(LogTemp, VeryVerbose, TEXT("    RunAway: Using AddMovementInput (not sprinting)"));
+	}
 
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(
 			2, 0.0f, FColor::Red,
-			FString::Printf(TEXT("AI RUNNING AWAY! Dist=%.1fm, Sprint=%d"),
+			FString::Printf(TEXT("AI RUNNING AWAY! Dist=%.1fm, Sprint=%d, Stunned=%d"),
 				DistanceToPlayer / 100.0f,
-				ControlledAI->IsSprinting())
+				ControlledAI->IsSprinting(),
+				ControlledAI->IsStunned())
 		);
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("AI running away from player (Distance: %.1fm)"), DistanceToPlayer / 100.0f);
 }
 
 void AAITagController::PerformDashAttack(const FVector& DirectionToPlayer)
@@ -270,16 +380,38 @@ void AAITagController::CheckAdvancedAbilities(float DistanceToPlayer, bool bIsCh
 {
 	if (!ControlledAI || !TargetPlayer) return;
 
-	if (ControlledAI->Difficulty == EAIDifficulty::Easy) return;
+	if (ControlledAI->Difficulty == EAIDifficulty::Easy)
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Easy difficulty - skipping advanced abilities"));
+		return;
+	}
 
-	if (ShouldConserveStamina()) return;
+	float StaminaPercent = ControlledAI->GetStaminaPercentage();
+	float ReserveThreshold = GetStaminaReserve();
+	bool bConservingStamina = ShouldConserveStamina();
+
+	if (bConservingStamina)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Conserving stamina: %.1f%% < %.1f%% threshold - No abilities"),
+			StaminaPercent * 100.0f,
+			ReserveThreshold * 100.0f);
+		return;
+	}
+
+	UE_LOG(LogTemp, VeryVerbose, TEXT("Checking abilities: Stamina=%.1f%%, Chasing=%d, Dist=%.1fm"),
+		StaminaPercent * 100.0f,
+		bIsChasing,
+		DistanceToPlayer / 100.0f);
 
 	if (ControlledAI->Difficulty == EAIDifficulty::Hard)
 	{
 		TryMantle();
 	}
 
-	if (bIsChasing && DistanceToPlayer > 1000.0f)
+
+	bool bShouldSlide = (bIsChasing && DistanceToPlayer > 1000.0f) ||
+		(!bIsChasing && DistanceToPlayer < 2000.0f);
+	if (bShouldSlide)
 	{
 		TrySlide();
 	}
@@ -287,16 +419,24 @@ void AAITagController::CheckAdvancedAbilities(float DistanceToPlayer, bool bIsCh
 	if (ControlledAI->Difficulty == EAIDifficulty::Hard)
 	{
 		float HeightDiff = GetHeightDifference();
-		if (FMath::Abs(HeightDiff) > 100.0f)
+		bool bShouldLeap = (FMath::Abs(HeightDiff) > 100.0f) ||
+			(!bIsChasing && DistanceToPlayer > 500.0f && DistanceToPlayer < 1500.0f);
+		if (bShouldLeap)
 		{
 			FVector Direction = bIsChasing ? GetDirectionToPlayer() : -GetDirectionToPlayer();
 			TryLeap(Direction);
 		}
 	}
 
-	if (!bIsChasing)
+
+	if (!bIsChasing && DistanceToPlayer > 3000.0f && DistanceToPlayer < 5000.0f)
 	{
-		ManageCrouch(DistanceToPlayer < 2000.0f);
+		ManageCrouch(true);
+		UE_LOG(LogTemp, VeryVerbose, TEXT("AI crouching at medium-far range (%.1fm)"), DistanceToPlayer / 100.0f);
+	}
+	else
+	{
+		ManageCrouch(false);
 	}
 }
 
@@ -304,28 +444,63 @@ void AAITagController::TryLeap(const FVector& TargetDirection)
 {
 	if (!ControlledAI) return;
 
-	if (ControlledAI->IsJumping() || ControlledAI->IsMantling() || ControlledAI->IsChargingLeap()) return;
+	if (ControlledAI->IsJumping())
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot leap: Already jumping"));
+		return;
+	}
+	if (ControlledAI->IsMantling())
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot leap: Currently mantling"));
+		return;
+	}
+	if (ControlledAI->IsChargingLeap())
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot leap: Already charging leap"));
+		return;
+	}
 
-	if (!ControlledAI->HasStaminaFor(ControlledAI->GetLeapCost())) return;
+	float LeapCost = ControlledAI->GetLeapCost();
+	if (!ControlledAI->HasStaminaFor(LeapCost))
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot leap: Insufficient stamina (need %.1f)"), LeapCost);
+		return;
+	}
 
 	ControlledAI->AIStartLeap(0.5f);
 
-	UE_LOG(LogTemp, Log, TEXT("AI using leap!"));
+	UE_LOG(LogTemp, Warning, TEXT("AI LEAPING! Stamina: %.1f%%"),
+		ControlledAI->GetStaminaPercentage() * 100.0f);
 }
 
 void AAITagController::TrySlide()
 {
 	if (!ControlledAI) return;
 
-	if (!ControlledAI->IsSprinting()) return;
+	if (!ControlledAI->IsSprinting())
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot slide: Not sprinting"));
+		return;
+	}
 
-	if (ControlledAI->GetSlideCooldown() > 0.0f) return;
+	float Cooldown = ControlledAI->GetSlideCooldown();
+	if (Cooldown > 0.0f)
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot slide: Cooldown remaining %.1fs"), Cooldown);
+		return;
+	}
 
-	if (!ControlledAI->HasStaminaFor(ControlledAI->GetSlideCost())) return;
+	float SlideCost = ControlledAI->GetSlideCost();
+	if (!ControlledAI->HasStaminaFor(SlideCost))
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot slide: Insufficient stamina (need %.1f)"), SlideCost);
+		return;
+	}
 
 	ControlledAI->AIStartSlide();
 
-	UE_LOG(LogTemp, Log, TEXT("AI sliding!"));
+	UE_LOG(LogTemp, Warning, TEXT("AI SLIDING! Stamina: %.1f%%"),
+		ControlledAI->GetStaminaPercentage() * 100.0f);
 }
 
 void AAITagController::TryMantle()
@@ -333,13 +508,25 @@ void AAITagController::TryMantle()
 	if (!ControlledAI) return;
 
 	// Check cooldown
-	if (ControlledAI->GetMantleCooldown() > 0.0f) return;
+	float Cooldown = ControlledAI->GetMantleCooldown();
+	if (Cooldown > 0.0f)
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot mantle: Cooldown remaining %.1fs"), Cooldown);
+		return;
+	}
 
 	// Check stamina
-	if (!ControlledAI->HasStaminaFor(ControlledAI->GetMantleCost())) return;
+	float MantleCost = ControlledAI->GetMantleCost();
+	if (!ControlledAI->HasStaminaFor(MantleCost))
+	{
+		UE_LOG(LogTemp, VeryVerbose, TEXT("Cannot mantle: Insufficient stamina (need %.1f)"), MantleCost);
+		return;
+	}
 
 	// Try mantle
 	ControlledAI->AITryMantle();
+
+	UE_LOG(LogTemp, VeryVerbose, TEXT("AI attempting mantle"));
 }
 
 void AAITagController::ManageCrouch(bool bShouldCrouch)
@@ -374,13 +561,13 @@ float AAITagController::GetStaminaReserve() const
 	switch (ControlledAI->Difficulty)
 	{
 	case EAIDifficulty::Easy:
-		return 0.3f;
+		return 0.15f;
 	case EAIDifficulty::Medium:
-		return 0.25f;
+		return 0.10f;
 	case EAIDifficulty::Hard:
-		return 0.20f;
+		return 0.05f;
 	default:
-		return 0.25f;
+		return 0.10f;
 	}
 }
 

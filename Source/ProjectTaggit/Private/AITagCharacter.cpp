@@ -4,7 +4,6 @@
 
 AAITagCharacter::AAITagCharacter()
 {
-
 	PrimaryActorTick.bCanEverTick = true;
 }
 
@@ -12,7 +11,6 @@ void AAITagCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// AI starts as "it"
 	bIsTagger = true;
 	UE_LOG(LogTemp, Warning, TEXT("AI started as TAGGER"));
 
@@ -63,7 +61,6 @@ void AAITagCharacter::AIMoveToward(FVector TargetLocation)
 {
 	FVector Direction = (TargetLocation - GetActorLocation()).GetSafeNormal();
 
-
 	AddMovementInput(Direction, 1.0f);
 }
 
@@ -76,20 +73,19 @@ void AAITagCharacter::AIPerformTagDash(FVector Direction)
 		return;
 	}
 
-	if (!StaminaComponent || !StaminaComponent->CanPerformAction(TagDashStaminaCost))
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina || !Stamina->CanPerformAction(TagDashStaminaCost))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AI cannot dash: Insufficient stamina"));
 		return;
 	}
 
-	StaminaComponent->TryConsumeStamina(TagDashStaminaCost);
+	Stamina->TryConsumeStamina(TagDashStaminaCost);
 
-	// Set up dash
 	bIsDashing = true;
 	TagDashTimeRemaining = TagDashDuration;
 	TagDashDirection = Direction.GetSafeNormal();
 
-	// Force end sprint/crouch/slide
 	if (bIsSprinting) EndSprint();
 	if (bIsSliding) EndSlide();
 	if (bIsCrouching)
@@ -143,12 +139,13 @@ AInputCharacter* AAITagCharacter::GetPlayerCharacter() const
 
 bool AAITagCharacter::CanUseDash() const
 {
+	UStaminaComponent* Stamina = GetStaminaComponent();
 	return bIsTagger &&
 		!bIsStunned &&
 		!bIsDashing &&
 		TagCooldownRemaining <= 0.0f &&
-		StaminaComponent &&
-		StaminaComponent->CanPerformAction(TagDashStaminaCost);
+		Stamina &&
+		Stamina->CanPerformAction(TagDashStaminaCost);
 }
 
 
@@ -181,7 +178,8 @@ void AAITagCharacter::AIStartSlide()
 	if (!bIsSprinting || bIsStunned || bIsSliding || bIsJumping || bIsMantling) return;
 	if (!GetCharacterMovement()->IsMovingOnGround() || SlideCooldownRemaining > 0.0f) return;
 
-	if (!StaminaComponent || !StaminaComponent->CanPerformAction(SlideStaminaCost))
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina || !Stamina->CanPerformAction(SlideStaminaCost))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AI cannot slide: Insufficient stamina"));
 		return;
@@ -192,11 +190,21 @@ void AAITagCharacter::AIStartSlide()
 	UE_LOG(LogTemp, Log, TEXT("AI started sliding"));
 }
 
+void AAITagCharacter::AIEndSlide()
+{
+	if (!bIsSliding) return;
+
+	EndSlide();
+
+	UE_LOG(LogTemp, Log, TEXT("AI ended sliding"));
+}
+
 void AAITagCharacter::AITryMantle()
 {
 	if (bIsMantling || bIsSliding || bIsStunned || MantleCooldownRemaining > 0.0f) return;
 
-	if (!StaminaComponent || !StaminaComponent->CanPerformAction(MantleStaminaCost))
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina || !Stamina->CanPerformAction(MantleStaminaCost))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AI cannot mantle: Insufficient stamina"));
 		return;
@@ -249,21 +257,24 @@ void AAITagCharacter::AIEndCrouch()
 
 float AAITagCharacter::GetCurrentStamina() const
 {
-	if (!StaminaComponent) return 0.0f;
-	return StaminaComponent->GetCurrentStamina();
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina) return 0.0f;
+	return Stamina->GetCurrentStamina();
 }
 
 float AAITagCharacter::GetStaminaPercentage() const
 {
-	if (!StaminaComponent) return 0.0f;
-	float Current = StaminaComponent->GetCurrentStamina();
-	float Max = StaminaComponent->GetMaxStamina();
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina) return 0.0f;
+	float Current = Stamina->GetCurrentStamina();
+	float Max = Stamina->GetMaxStamina();
 	if (Max <= 0.0f) return 0.0f;
 	return Current / Max;
 }
 
 bool AAITagCharacter::HasStaminaFor(float Cost) const
 {
-	if (!StaminaComponent) return false;
-	return StaminaComponent->CanPerformAction(Cost);
+	UStaminaComponent* Stamina = GetStaminaComponent();
+	if (!Stamina) return false;
+	return Stamina->CanPerformAction(Cost);
 }

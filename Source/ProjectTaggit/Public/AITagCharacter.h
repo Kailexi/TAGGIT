@@ -27,18 +27,17 @@ public:
 
 	// AI Behavior Parameters
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float ChaseRadius = 2000.0f;  // (20m)
+	float ChaseRadius = 2000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float DashRadius = 400.0f;    // (4m)
+	float DashRadius = 400.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float SprintRadius = 1000.0f; //  (10m)
+	float SprintRadius = 1000.0f; 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Behavior")
-	float PatrolRadius = 500.0f;  //  (5m)
+	float PatrolRadius = 500.0f;  
 
-	// AI Movement Functions
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void AIMoveToward(FVector TargetLocation);
 
@@ -52,24 +51,25 @@ public:
 	void AIEndSprint();
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
-	void AIStartLeap(float ChargeTime = 0.5f);
+	void AIStartLeap(float ChargeTime = 0.5f);  
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
+	void AIReleaseLeap();  
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
-	void AIReleaseLeap();
+	void AIStartSlide();  
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
-	void AIStartSlide();
+	void AIEndSlide(); 
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
-	void AITryMantle();
+	void AITryMantle();  
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
-	void AIStartCrouch();
+	void AIStartCrouch();  
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement|Advanced")
-	void AIEndCrouch();
+	void AIEndCrouch();  
 
-	// AI State Queries
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	float GetDistanceToPlayer() const;
 
@@ -78,7 +78,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	bool CanUseDash() const;
-
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	float GetCurrentStamina() const;
 
@@ -99,6 +98,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	bool IsCrouching() const { return bIsCrouching; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	bool IsSliding() const { return bIsSliding; }
 
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	float GetSlideCooldown() const { return SlideCooldownRemaining; }

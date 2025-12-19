@@ -13,10 +13,10 @@ class PROJECTTAGGIT_API AInputCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* Camera;
 
-protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaminaComponent* StaminaComponent;
 
+protected:
 	UPROPERTY(EditAnywhere, Category = "EnhancedInput")
 	class UInputMappingContext* InputMapping;
 
@@ -79,6 +79,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "GameState")
 	bool IsSprinting() const { return bIsSprinting; }
+
+	UFUNCTION(BlueprintCallable, Category = "Stamina")
+	UStaminaComponent* GetStaminaComponent() const { return StaminaComponent; }
 
 protected:
 	void Move(const FInputActionValue& InputValue);
@@ -176,11 +179,9 @@ protected:
 	float TagReachDistance = 150.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TagStunDuration = 0.5f; 
-
+	float TagStunDuration = 0.5f;
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
-	float TaggedStunDuration = 2.5f;  
-
+	float TaggedStunDuration = 2.5f; 
 	UPROPERTY(EditAnywhere, Category = "Movement|TagDash")
 	float TagStunGracePeriod = 0.15f;  
 
@@ -223,7 +224,7 @@ protected:
 	bool bTagFailedThisDash = false;  // Track if dash ended without tagging anyone
 
 	UPROPERTY(BlueprintReadWrite, Category = "GameState")
-	bool bIsTagger = false; 
+	bool bIsTagger = false;  
 
 
 
