@@ -1,10 +1,13 @@
 #include "AITagCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "AITagController.h"
 
 AAITagCharacter::AAITagCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	AIControllerClass = AAITagController::StaticClass();
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
 void AAITagCharacter::BeginPlay()

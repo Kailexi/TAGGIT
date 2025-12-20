@@ -11,11 +11,17 @@ ACPP_MPGameState::ACPP_MPGameState()
 	startSeconds = 420;  // 7 minutes
 	seconds = 0;
 	PrimaryActorTick.bCanEverTick = true;
+
+	AICharacterClass = AAITagCharacter::StaticClass();
 }
 
 void ACPP_MPGameState::BeginPlay()
 {
 	Super::BeginPlay();
+
+	UE_LOG(LogTemp, Error, TEXT("=== CPP_MPGameState::BeginPlay CALLED ==="));
+	UE_LOG(LogTemp, Error, TEXT("MPGameState: This GameState instance is ACTIVE"));
+
 	initializeRound(false);
 
 	GenerateSpawnLocations();
@@ -31,11 +37,21 @@ void ACPP_MPGameState::BeginPlay()
 
 		UE_LOG(LogTemp, Warning, TEXT("MP Survival Mode: Survive 7 minutes! New AI spawns every minute!"));
 	}
+
+	UE_LOG(LogTemp, Error, TEXT("MPGameState BeginPlay Complete: AISpawnInterval=%.1f, Tick=%d"),
+		AISpawnInterval, PrimaryActorTick.bCanEverTick);
 }
 
 void ACPP_MPGameState::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	static bool bFirstTick = true;
+	if (bFirstTick)
+	{
+		UE_LOG(LogTemp, Error, TEXT("=== CPP_MPGameState::Tick FIRST CALL ==="));
+		bFirstTick = false;
+	}
 
 	if (bGameEnded)
 		return;
@@ -73,8 +89,19 @@ void ACPP_MPGameState::Tick(float DeltaTime)
 	}
 
 	AISpawnTimer += DeltaTime;
+
+	static float DebugLogTimer = 0.0f;
+	DebugLogTimer += DeltaTime;
+	if (DebugLogTimer >= 5.0f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MP Spawn Debug: Timer=%.1f, Interval=%.1f, AIs=%d, NextIn=%.1fs"),
+			AISpawnTimer, AISpawnInterval, AICharacters.Num(), AISpawnInterval - AISpawnTimer);
+		DebugLogTimer = 0.0f;
+	}
+
 	if (AISpawnTimer >= AISpawnInterval)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("MP Spawn: Timer reached! Spawning AI now..."));
 		AISpawnTimer = 0.0f;
 		SpawnAI();
 	}
@@ -131,6 +158,13 @@ void ACPP_MPGameState::SpawnAI()
 	if (!GetWorld())
 		return;
 
+	if (!AICharacterClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("MPGameState: AICharacterClass is not set! Cannot spawn AI."));
+		return;
+	}
+
+
 	FVector SpawnLocation = FVector(0, 0, 100);
 	if (SpawnLocations.Num() > 0)
 	{
@@ -142,7 +176,7 @@ void ACPP_MPGameState::SpawnAI()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	AAITagCharacter* NewAI = GetWorld()->SpawnActor<AAITagCharacter>(
-		AAITagCharacter::StaticClass(),
+		AICharacterClass,
 		SpawnLocation,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -150,14 +184,13 @@ void ACPP_MPGameState::SpawnAI()
 
 	if (NewAI)
 	{
-		bool bIsTagger = (AISpawnCount == 0);
-		NewAI->SetTaggerStatus(bIsTagger);
+		NewAI->SetTaggerStatus(true);
 
 		AICharacters.Add(NewAI);
 		AISpawnCount++;
 
-		UE_LOG(LogTemp, Warning, TEXT("Spawned AI #%d at location %s (Tagger: %s)"),
-			AISpawnCount, *SpawnLocation.ToString(), bIsTagger ? TEXT("Yes") : TEXT("No"));
+		UE_LOG(LogTemp, Warning, TEXT("Spawned AI #%d (%s) at location %s (Tagger: Yes)"),
+			AISpawnCount, *AICharacterClass->GetName(), *SpawnLocation.ToString());
 
 		if (GEngine)
 		{
@@ -168,6 +201,10 @@ void ACPP_MPGameState::SpawnAI()
 				FString::Printf(TEXT("New AI Spawned! Total AIs: %d"), AICharacters.Num())
 			);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to spawn AI at location %s"), *SpawnLocation.ToString());
 	}
 }
 
@@ -244,7 +281,7 @@ void ACPP_MPGameState::GenerateSpawnLocations()
 {
 	// Generate 12 spawn points in a circle around origin
 	int32 NumSpawnPoints = 12;
-	float Radius = 2000.0f;  
+	float Radius = 5000.0f;  // 50 meters
 	float AngleStep = 360.0f / NumSpawnPoints;
 
 	for (int32 i = 0; i < NumSpawnPoints; i++)
@@ -254,7 +291,7 @@ void ACPP_MPGameState::GenerateSpawnLocations()
 
 		float X = FMath::Cos(Radians) * Radius;
 		float Y = FMath::Sin(Radians) * Radius;
-		float Z = 100.0f;
+		float Z = 100.0f;  // Spawn height
 
 		SpawnLocations.Add(FVector(X, Y, Z));
 	}

@@ -6,6 +6,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "ProjectTaggit/StaminaComponent.h"
+#include "ProjectTaggit/Public/AITagCharacter.h"
 #include "Math/UnrealMathUtility.h"
 
 AInputCharacter::AInputCharacter()
@@ -70,6 +71,7 @@ void AInputCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	bIsTagger = false;
+	TagCooldownRemaining = 0.5f;
 
 	if (bIsTagger) {
 		UE_LOG(LogTemp, Warning, TEXT("Player started as TAGGER"));
@@ -388,6 +390,7 @@ void AInputCharacter::ReleaseJump()
 			LeapChargeTime = 0.0f;
 		}
 
+		// Normal jump - FREE, no stamina cost
 		if (CanJump())
 		{
 			bIsJumping = true;
@@ -397,6 +400,7 @@ void AInputCharacter::ReleaseJump()
 		return;
 	}
 
+	// Charged leap - costs stamina
 	bIsChargingLeap = false;
 	bIsJumping = true;
 
@@ -496,6 +500,7 @@ void AInputCharacter::EndCrouch()
 void AInputCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	// Reduce camera offset to 50% for less extreme crouch view
 	TargetCrouchEyeOffset.Z = -HalfHeightAdjust * 0.5f;
 }
 
@@ -509,6 +514,7 @@ void AInputCharacter::CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult)
 {
 	Super::CalcCamera(DeltaTime, OutResult);
 
+	// NEVER apply camera offset during dash or stun - keep camera at eye level
 	if (bIsDashing || bIsStunned)
 	{
 		return;
@@ -581,6 +587,7 @@ void AInputCharacter::CrouchOrSlideHoldEnd()
 
 void AInputCharacter::CrouchOrSlideToggle()
 {
+	// Can't toggle crouch during dash or stun (except to turn OFF)
 	if ((bIsDashing || bIsStunned) && !bIsCrouching)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Cannot toggle crouch ON during dash or stun"));
@@ -700,6 +707,7 @@ void AInputCharacter::TryMantle()
 
 void AInputCharacter::PerformTagDash()
 {
+	// Auto-uncrouch/end slide if trying to dash - don't block, just fix the state
 	if (bIsCrouching)
 	{
 		UnCrouch();
@@ -747,7 +755,7 @@ void AInputCharacter::PerformTagDash()
 		TagDashDirection = GetActorForwardVector();
 	}
 
-
+	// Force end all movement states before dash
 	if (bIsSprinting) EndSprint();
 	if (bIsSliding) EndSlide();
 	if (bIsCrouching || GetCharacterMovement()->IsCrouching())
@@ -757,8 +765,9 @@ void AInputCharacter::PerformTagDash()
 		bCrouchToggled = false;
 	}
 
+	// Give initial velocity boost for impactful dash feel
 	FVector DashVelocity = TagDashDirection * TagDashSpeed;
-	DashVelocity.Z = GetCharacterMovement()->Velocity.Z;
+	DashVelocity.Z = GetCharacterMovement()->Velocity.Z; // Keep vertical velocity
 	GetCharacterMovement()->Velocity = DashVelocity;
 
 	UE_LOG(LogTemp, Log, TEXT("Tag dash started! Direction: %s, Speed: %.0f"),
@@ -797,6 +806,17 @@ void AInputCharacter::TryTag()
 
 			if (OtherPlayer && OtherPlayer != this && !OtherPlayer->bIsTagger)
 			{
+				// Prevent AI-to-AI tagging (AIs can only tag the player)
+				bool bThisIsAI = Cast<AAITagCharacter>(this) != nullptr;
+				bool bOtherIsAI = Cast<AAITagCharacter>(OtherPlayer) != nullptr;
+
+				if (bThisIsAI && bOtherIsAI)
+				{
+					// Both are AIs - skip this tag
+					UE_LOG(LogTemp, Verbose, TEXT("Prevented AI-to-AI tag attempt"));
+					continue;
+				}
+
 				// Successful tag!
 				UE_LOG(LogTemp, Log, TEXT("TAG! Hit player: %s"), *OtherPlayer->GetName());
 
@@ -808,9 +828,9 @@ void AInputCharacter::TryTag()
 				OnBecameHider();
 				EndDash(true);  // Pass true to indicate successful tag
 
-
+				// Apply LONGER stun to the NEW tagger (prevent instant re-tag)
 				OtherPlayer->bIsStunned = true;
-				OtherPlayer->StunTimeRemaining = TaggedStunDuration;
+				OtherPlayer->StunTimeRemaining = TaggedStunDuration;  // Use longer stun duration
 				OtherPlayer->StunGracePeriodRemaining = TagStunGracePeriod;
 
 				break;  // Only tag one player at a time
@@ -858,12 +878,12 @@ void AInputCharacter::EndDash(bool bTagSuccessful)
 	TagDashTimeRemaining = 0.0f;
 	TagCooldownRemaining = TagCooldown;
 
-
+	// If tag failed, apply stun penalty to tagger
 	if (!bTagSuccessful && bIsTagger)
 	{
 		bIsStunned = true;
-		StunTimeRemaining = TagStunDuration;  
-		StunGracePeriodRemaining = TagStunGracePeriod;  
+		StunTimeRemaining = TagStunDuration;  // Full stun duration for failed tag (0.5s)
+		StunGracePeriodRemaining = TagStunGracePeriod;  // Initialize grace period for momentum
 		bTagFailedThisDash = true;
 
 		UE_LOG(LogTemp, Warning, TEXT("Tag FAILED - Applying stun penalty (%.2fs) with grace period (%.2fs)"),
