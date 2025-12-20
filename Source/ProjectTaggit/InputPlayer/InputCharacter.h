@@ -83,6 +83,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Stamina")
 	UStaminaComponent* GetStaminaComponent() const { return StaminaComponent; }
 
+	UFUNCTION(BlueprintCallable, Category = "GameState")
+	void SetTaggerStatus(bool bNewTaggerStatus);
+
 protected:
 	void Move(const FInputActionValue& InputValue);
 	void Look(const FInputActionValue& InputValue);
@@ -103,8 +106,6 @@ protected:
 	void OnTagged(AInputCharacter* TaggerPlayer);
 	void EndDash(bool bTagSuccessful = false);
 
-	UFUNCTION(BlueprintCallable, Category = "GameState")
-	void SetTaggerStatus(bool bNewTaggerStatus);
 
 	//Movement 
 	UPROPERTY(EditAnywhere, Category = "Movement|Walk")

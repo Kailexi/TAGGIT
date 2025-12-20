@@ -8,7 +8,7 @@ public class ProjectTaggit : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "NavigationSystem", "LearningAgents" });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "NavigationSystem", "LearningAgents", "LearningAgentsTraining"});
 
         PrivateDependencyModuleNames.AddRange(new string[] {  });
 
